@@ -1,40 +1,133 @@
 'use strict';
-const $ = selector => document.querySelector(selector);
-const $$ = selector => [...document.querySelectorAll(selector)];
-const colors = { stop_wait: '#555555', parallel: '#929292', chase: '#ffffff', ir: '#cccccc', adaptive: '#b6ff00' };
-const themeColor = name => getComputedStyle(document.documentElement).getPropertyValue(name).trim();
+const $ = (selector) => document.querySelector(selector);
+const $$ = (selector) => [...document.querySelectorAll(selector)];
+const colors = {
+  stop_wait: '#555555',
+  parallel: '#929292',
+  chase: '#ffffff',
+  ir: '#cccccc',
+  adaptive: '#b6ff00',
+};
+const themeColor = (name) => getComputedStyle(document.documentElement).getPropertyValue(name).trim();
 function updatePalette() {
   const light = document.documentElement.dataset.theme === 'light';
-  Object.assign(colors, { stop_wait: light ? '#aaaaaa' : '#555555', parallel: light ? '#777777' : '#929292',
-    chase: light ? '#000000' : '#ffffff', ir: light ? '#444444' : '#cccccc', adaptive: '#b6ff00' });
+  Object.assign(colors, {
+    stop_wait: light ? '#aaaaaa' : '#555555',
+    parallel: light ? '#777777' : '#929292',
+    chase: light ? '#000000' : '#ffffff',
+    ir: light ? '#444444' : '#cccccc',
+    adaptive: '#b6ff00',
+  });
 }
-const short = { stop_wait: 'Stop-and-Wait', parallel: 'Parallel', chase: 'Chase CC', ir: 'HARQ IR', adaptive: 'Adaptive' };
-const descriptions = { stop_wait: ['Один процесс · без комбинирования', 'BASELINE', '↔'], parallel: ['N процессов · независимые повторы', 'TYPE I', '▥'], chase: ['Накопление SNR · повтор кодового блока', 'SOFT', '⊕'], ir: ['Новая избыточность · накопление информации', 'SOFT', '⌘'], adaptive: ['RTT + CSI · выбор режима и burst', 'PROPOSED', '✧'] };
-const state = { defaults: null, presets: {}, algorithms: [], job: null, result: null, traceResult: null, view: 'overview', polling: null, pending: false };
-const titles = { overview: ['Обзор эксперимента', 'За пределами<br><span>задержки.</span>', 'Исследуйте HARQ-ретрансмиссии в радиолиниях с большим временем распространения.'], sweep: ['Параметрические серии', 'Находите<br><span>закономерности.</span>', 'Один параметр. Независимые прогоны. Проверяемые выводы.'], timeline: ['Диаграмма передач', 'Каждый бит.<br><span>Каждый повтор.</span>', 'Передачи, приём и обратная связь — на одной временной шкале.'], history: ['История запусков', 'Исследования<br><span>продолжаются.</span>', 'Вернитесь к сохранённым экспериментам и продолжите анализ.'], method: ['Модель и методика', 'Точность<br><span>в деталях.</span>', 'Прозрачные допущения. Воспроизводимая методика. Честные результаты.'] };
-const fmt = (value, digits = 2) => value == null ? '—' : Number(value).toLocaleString('ru-RU', { maximumFractionDigits: digits });
-const pct = value => value == null ? '—' : `${fmt(value * 100)}%`;
-const escapeHTML = str => String(str ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
-function toast(message, error = false) { const el = $('#toast'); el.textContent = message; el.classList.toggle('error', error); el.classList.remove('hidden'); clearTimeout(toast.timer); toast.timer = setTimeout(() => el.classList.add('hidden'), error ? 16000 : 4500); }
+const short = {
+  stop_wait: 'Stop-and-Wait',
+  parallel: 'Parallel',
+  chase: 'Chase CC',
+  ir: 'HARQ IR',
+  adaptive: 'Adaptive',
+};
+const descriptions = {
+  stop_wait: ['Один процесс · без комбинирования', 'BASELINE', '↔'],
+  parallel: ['N процессов · независимые повторы', 'TYPE I', '▥'],
+  chase: ['Накопление SNR · повтор кодового блока', 'SOFT', '⊕'],
+  ir: ['Новая избыточность · накопление информации', 'SOFT', '⌘'],
+  adaptive: ['RTT + CSI · выбор режима и burst', 'PROPOSED', '✧'],
+};
+const state = {
+  defaults: null,
+  presets: {},
+  algorithms: [],
+  job: null,
+  result: null,
+  traceResult: null,
+  view: 'overview',
+  polling: null,
+  pending: false,
+};
+const titles = {
+  overview: [
+    'Обзор эксперимента',
+    'Сравнение алгоритмов HARQ',
+    'Настройка радиолинии, запуск моделирования и анализ результатов.',
+  ],
+  sweep: [
+    'Параметрические серии',
+    'Параметрические исследования',
+    'Зависимость характеристик HARQ от RTT, SNR, числа процессов, памяти и лимита передач.',
+  ],
+  timeline: [
+    'Диаграмма передач',
+    'Временная диаграмма передач',
+    'Передачи, декодирование и ACK/NACK для каждого HARQ-процесса.',
+  ],
+  history: [
+    'История запусков',
+    'История экспериментов',
+    'Сохранённые конфигурации и результаты моделирования.',
+  ],
+  method: [
+    'Модель и методика',
+    'Модель и методика',
+    'Математические допущения, определения метрик и ограничения симуляции.',
+  ],
+};
+const fmt = (value, digits = 2) =>
+  value == null ? '—' : Number(value).toLocaleString('ru-RU', { maximumFractionDigits: digits });
+const pct = (value) => (value == null ? '—' : `${fmt(value * 100)}%`);
+const escapeHTML = (str) =>
+  String(str ?? '').replace(
+    /[&<>"']/g,
+    (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]
+  );
+function toast(message, error = false) {
+  const el = $('#toast');
+  el.textContent = message;
+  el.classList.toggle('error', error);
+  el.classList.remove('hidden');
+  clearTimeout(toast.timer);
+  toast.timer = setTimeout(() => el.classList.add('hidden'), error ? 16000 : 4500);
+}
 async function api(endpoint, method = 'GET', body = null) {
   if (window.harq) return window.harq.request(endpoint, method, body);
-  const response = await fetch(endpoint, { method, ...(body !== null ? { headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) } : {}) });
+  const response = await fetch(endpoint, {
+    method,
+    ...(body !== null ? { headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) } : {}),
+  });
   if (!response.ok) throw new Error(await response.text());
   return endpoint.includes('/export/') ? response.text() : response.json();
 }
-function readable(error) { try { const value = JSON.parse(error.message); if (Array.isArray(value.detail)) return value.detail.map(e => `${e.loc.slice(1).join('.')}: ${e.msg}`).join('\n'); return value.detail || error.message; } catch { return error.message; } }
+function readable(error) {
+  try {
+    const value = JSON.parse(error.message);
+    if (Array.isArray(value.detail))
+      return value.detail.map((e) => `${e.loc.slice(1).join('.')}: ${e.msg}`).join('\n');
+    return value.detail || error.message;
+  } catch {
+    return error.message;
+  }
+}
 function setView(view, scroll = true) {
   state.view = view;
-  $$('.view').forEach(el => el.classList.toggle('hidden', el.id !== `view-${view}`));
-  $$('.nav-item').forEach(el => { el.classList.toggle('active', el.dataset.view === view); if (el.dataset.view === view) el.setAttribute('aria-current', 'page'); else el.removeAttribute('aria-current'); });
-  $('#crumb').textContent = titles[view][0]; $('#page-title').innerHTML = titles[view][1]; $('#page-description').textContent = titles[view][2];
+  $$('.view').forEach((el) => el.classList.toggle('hidden', el.id !== `view-${view}`));
+  $$('.nav-item').forEach((el) => {
+    el.classList.toggle('active', el.dataset.view === view);
+    if (el.dataset.view === view) el.setAttribute('aria-current', 'page');
+    else el.removeAttribute('aria-current');
+  });
+  $('#crumb').textContent = titles[view][0];
+  $('#page-title').innerHTML = titles[view][1];
+  $('#page-description').textContent = titles[view][2];
   window.labUI?.enterView(view);
   if (view === 'history') refreshHistory();
   if (scroll) window.scrollTo({ top: 0 });
 }
-function populate(config) { for (const input of $('#config-form').elements) if (input.name && config[input.name] !== undefined) input.value = config[input.name]; updateCapacity(); }
+function populate(config) {
+  for (const input of $('#config-form').elements)
+    if (input.name && config[input.name] !== undefined) input.value = config[input.name];
+  updateCapacity();
+}
 function config() {
-  const invalid = [...$('#config-form').elements].find(el => el.willValidate && !el.checkValidity());
+  const invalid = [...$('#config-form').elements].find((el) => el.willValidate && !el.checkValidity());
   if (invalid) {
     setView('overview');
     if (invalid.closest('details')) invalid.closest('details').open = true;
@@ -42,207 +135,449 @@ function config() {
     throw new Error(`${invalid.closest('label').textContent.trim()}: ${invalid.validationMessage}`);
   }
   const value = { ...state.defaults };
-  for (const input of $('#config-form').elements) if (input.name) value[input.name] = input.type === 'number' ? Number(input.value) : input.value;
+  for (const input of $('#config-form').elements)
+    if (input.name) value[input.name] = input.type === 'number' ? Number(input.value) : input.value;
   return value;
 }
 function updateCapacity() {
-  const f = $('#config-form').elements, slot = Number(f.slot_ms.value), rtt = Number(f.rtt_ms.value), n = Number(f.harq_processes.value);
+  const f = $('#config-form').elements,
+    slot = Number(f.slot_ms.value),
+    rtt = Number(f.rtt_ms.value),
+    n = Number(f.harq_processes.value);
   const needed = Math.ceil((rtt + slot) / slot);
   $('#needed-processes').textContent = `${fmt(needed, 0)} процессов`;
-  $('#capacity-caption').textContent = `Текущий теоретический предел загрузки: ${pct(Math.min(1, n * slot / (rtt + slot)))}`;
+  $('#capacity-caption').textContent =
+    `Текущий теоретический предел загрузки: ${pct(Math.min(1, (n * slot) / (rtt + slot)))}`;
   const selected = $('.preset.selected');
-  $('#live-scenario').textContent = `${selected ? ({ terrestrial: 'GROUND', leo: 'LEO', geo: 'GEO', fading: 'FADING' }[selected.dataset.preset]) : 'CUSTOM'} / ${fmt(rtt)} MS RTT`;
+  $('#live-scenario').textContent =
+    `${selected ? { terrestrial: 'GROUND', leo: 'LEO', geo: 'GEO', fading: 'FADING' }[selected.dataset.preset] : 'CUSTOM'} / ${fmt(rtt)} MS RTT`;
 }
 function renderAlgorithms() {
-  $('#algorithm-list').innerHTML = state.algorithms.map(a => { const d = descriptions[a.id]; return `<label class="algorithm-row"><input type="checkbox" name="algorithm" value="${a.id}" checked><span class="algorithm-icon color-${a.id}">${d[2]}</span><span class="algorithm-text"><strong>${escapeHTML(a.label)}</strong><small>${d[0]}</small></span><span class="algo-tag">${d[1]}</span></label>`; }).join('');
-  $$('input[name="algorithm"]').forEach(el => el.addEventListener('change', () => { $('#algorithm-count').textContent = `${$$('input[name="algorithm"]:checked').length} ВЫБРАНО`; }));
+  $('#algorithm-list').innerHTML = state.algorithms
+    .map((a) => {
+      const d = descriptions[a.id];
+      return `<label class="algorithm-row"><input type="checkbox" name="algorithm" value="${a.id}" checked><span class="algorithm-icon color-${a.id}">${d[2]}</span><span class="algorithm-text"><strong>${escapeHTML(a.label)}</strong><small>${d[0]}</small></span><span class="algo-tag">${d[1]}</span></label>`;
+    })
+    .join('');
+  $$('input[name="algorithm"]').forEach((el) =>
+    el.addEventListener('change', () => {
+      $('#algorithm-count').textContent = `${$$('input[name="algorithm"]:checked').length} ВЫБРАНО`;
+    })
+  );
 }
 function busy(value) {
-  state.pending = value; $('#run').disabled = value; $('#run-sweep').disabled = value;
+  state.pending = value;
+  $('#run').disabled = value;
+  $('#run-sweep').disabled = value;
   $('#run').setAttribute('aria-busy', String(value));
   $('#floating-status').classList.toggle('hidden', !value);
-  $('#run').innerHTML = value ? '<span class="busy-glyph">↗</span> Выполняется расчёт <span>···</span>' : '<span>▶</span> Запустить сравнение <span>↗</span>';
+  $('#run').innerHTML = value
+    ? '<span class="busy-glyph">↗</span> Выполняется расчёт <span>···</span>'
+    : '<span>▶</span> Запустить сравнение <span>↗</span>';
 }
 async function launch(sweep = false) {
   try {
-    const algorithms = $$('input[name="algorithm"]:checked').map(el => el.value);
+    const algorithms = $$('input[name="algorithm"]:checked').map((el) => el.value);
     if (!algorithms.length) throw new Error('Выберите хотя бы один алгоритм.');
     if (!$('#repetitions').reportValidity()) return;
-    const request = { name: `${sweep ? 'Серия' : 'Сравнение'} · ${new Date().toLocaleString('ru-RU')}`, config: config(), algorithms, repetitions: Number($('#repetitions').value) };
+    const request = {
+      name: `${sweep ? 'Серия' : 'Сравнение'} · ${new Date().toLocaleString('ru-RU')}`,
+      config: config(),
+      algorithms,
+      repetitions: Number($('#repetitions').value),
+    };
     if (sweep) {
       request.axis = $('#sweep-axis').value;
       const text = $('#sweep-values').value.trim();
-      if (!text || text.split(',').some(v => !v.trim() || !Number.isFinite(Number(v)))) throw new Error('Введите числовые значения через запятую. Десятичный разделитель — точка.');
-      request.values = text.split(',').map(v => Number(v.trim()));
+      if (!text || text.split(',').some((v) => !v.trim() || !Number.isFinite(Number(v))))
+        throw new Error('Введите числовые значения через запятую. Десятичный разделитель — точка.');
+      request.values = text.split(',').map((v) => Number(v.trim()));
     }
     busy(true);
     const job = await api('/api/jobs', 'POST', request);
     state.job = job.id;
     $('#job-status').classList.remove('hidden');
-    $('#job-message').textContent = 'В очереди на расчёт…'; $('#job-progress').value = 0;
+    $('#job-message').textContent = 'В очереди на расчёт…';
+    $('#job-progress').value = 0;
     $('#cancel').classList.remove('hidden');
-    setView('overview', false); $('#results-anchor').scrollIntoView({ behavior: window.labUI?.reducedMotion() ? 'instant' : 'smooth', block: 'start' });
+    setView('overview', false);
+    $('#results-anchor').scrollIntoView({
+      behavior: window.labUI?.reducedMotion() ? 'instant' : 'smooth',
+      block: 'start',
+    });
     poll();
-  } catch (error) { busy(false); toast(readable(error), true); }
+  } catch (error) {
+    busy(false);
+    toast(readable(error), true);
+  }
 }
 async function poll() {
   clearTimeout(state.polling);
   if (!state.job) return;
   try {
     const job = await api(`/api/jobs/${state.job}`);
-    $('#job-status').classList.remove('hidden'); $('#job-message').textContent = job.message || job.status; $('#job-progress').value = job.progress;
+    $('#job-status').classList.remove('hidden');
+    $('#job-message').textContent = job.message || job.status;
+    $('#job-progress').value = job.progress;
     $('#floating-message').textContent = job.message || 'Выполняется расчёт';
     if (job.status === 'completed') {
-      busy(false); $('#cancel').classList.add('hidden'); state.result = job.result; renderResults(); refreshHistory();
+      busy(false);
+      $('#cancel').classList.add('hidden');
+      state.result = job.result;
+      renderResults();
+      refreshHistory();
       toast('Эксперимент завершён. Результаты сохранены.');
       if (job.result.request.axis) setView('sweep');
       return;
     }
-    if (['failed', 'cancelled', 'interrupted'].includes(job.status)) { busy(false); $('#cancel').classList.add('hidden'); toast(job.message, job.status !== 'cancelled'); refreshHistory(); return; }
+    if (['failed', 'cancelled', 'interrupted'].includes(job.status)) {
+      busy(false);
+      $('#cancel').classList.add('hidden');
+      toast(job.message, job.status !== 'cancelled');
+      refreshHistory();
+      return;
+    }
     state.polling = setTimeout(poll, 600);
-  } catch (error) { busy(false); toast(`Не удалось получить статус: ${readable(error)}`, true); }
+  } catch (error) {
+    busy(false);
+    toast(`Не удалось получить статус: ${readable(error)}`, true);
+  }
 }
-function barChart(rows, metric) {
-  const width = 550, left = 112, right = 60, top = 12, rowH = 45, height = top + rows.length * rowH + 28;
-  const values = rows.map(r => r.metrics[metric]);
-  const max = Math.max(1, ...values.map(v => v.ci_high ?? v.mean ?? 0)) * 1.08;
-  const scale = v => left + (v / max) * (width - left - right);
-  let svg = `<svg viewBox="0 0 ${width} ${height}" role="img" aria-label="${escapeHTML(metric)}"><title>${escapeHTML(metric)} с 95% доверительными интервалами</title>`;
-  for (let i = 0; i <= 4; i++) { const x = scale(max * i / 4); svg += `<line class="chart-gridline" x1="${x}" x2="${x}" y1="0" y2="${height - 25}"/><text class="chart-label" text-anchor="middle" x="${x}" y="${height - 4}">${fmt(max * i / 4, 0)}</text>`; }
-  rows.forEach((r, i) => {
-    const v = values[i], y = top + i * rowH;
-    svg += `<text class="chart-label" x="0" y="${y + 18}">${short[r.algorithm]}</text>`;
-    if (v.mean == null) { svg += `<text class="chart-value" x="${left + 5}" y="${y + 18}">Нет доставок</text>`; return; }
-    svg += `<rect x="${left}" y="${y + 3}" width="${Math.max(0.8, scale(v.mean) - left)}" height="23" class="chart-bar" fill="${colors[r.algorithm]}" stroke="${themeColor('--fg')}" stroke-width="0.3"><title>${short[r.algorithm]}: ${fmt(v.mean)}; ДИ [${fmt(v.ci_low)}; ${fmt(v.ci_high)}]</title></rect>`;
-    if (v.ci_low != null) { const low = scale(Math.max(0, v.ci_low)), high = scale(v.ci_high), mid = y + 14; svg += `<path class="chart-ci" d="M${low},${mid} H${high} M${low},${mid - 5} v10 M${high},${mid - 5} v10"/>`; }
-    svg += `<text class="chart-value" x="${scale(v.ci_high ?? v.mean) + 7}" y="${y + 19}">${fmt(v.mean, 1)}</text>`;
-  });
-  return svg + '</svg>';
+function configureAnalytics() {
+  window.HarqAnalytics.configure({ colors, themeColor, fmt, short });
 }
-function metricCard(label, value, unit, caption) { return `<div class="metric-card"><label>${label}</label><div class="metric-value"><span data-counter>${value}</span><small>${unit}</small></div><p>${caption}</p></div>`; }
+function applyChartFilter(filter = state.chartFilter || 'all') {
+  state.chartFilter = filter;
+  $$('[data-chart-filter]').forEach((button) =>
+    button.setAttribute('aria-pressed', String(button.dataset.chartFilter === filter))
+  );
+  $$('#comparison-charts [data-chart-group]').forEach((card) =>
+    card.classList.toggle('hidden', filter !== 'all' && !card.dataset.chartGroup.split(' ').includes(filter))
+  );
+}
+function renderComparisonCharts(result) {
+  configureAnalytics();
+  $('#comparison-charts').innerHTML = window.HarqAnalytics.comparison(result);
+  $('#result-insights').innerHTML = window.HarqAnalytics.insights(result);
+  applyChartFilter();
+}
+function metricCard(label, value, unit, caption) {
+  return `<div class="metric-card"><label>${label}</label><div class="metric-value"><span data-counter>${value}</span><small>${unit}</small></div><p>${caption}</p></div>`;
+}
 function renderResults() {
-  const result = state.result; if (!result) return;
-  if (result.request.axis) { state.sweepResult = result; state.sweepJob = state.job; renderSweep(); return; }
+  const result = state.result;
+  if (!result) return;
+  if (result.request.axis) {
+    state.sweepResult = result;
+    state.sweepJob = state.job;
+    renderSweep();
+    return;
+  }
   state.overviewJob = state.job;
   state.traceResult = result;
-  $('#empty-results').classList.add('hidden'); $('#result-content').classList.remove('hidden');
-  const rows = result.summary, best = rows.reduce((a, b) => a.metrics.goodput_kbps.mean > b.metrics.goodput_kbps.mean ? a : b);
-  const adaptive = rows.find(r => r.algorithm === 'adaptive'), base = rows.find(r => r.algorithm === 'parallel');
-  const delta = adaptive && base && base.metrics.goodput_kbps.mean > 0 ? (adaptive.metrics.goodput_kbps.mean / base.metrics.goodput_kbps.mean - 1) * 100 : null;
+  $('#empty-results').classList.add('hidden');
+  $('#result-content').classList.remove('hidden');
+  const rows = result.summary,
+    best = rows.reduce((a, b) => (a.metrics.goodput_kbps.mean > b.metrics.goodput_kbps.mean ? a : b));
+  const adaptive = rows.find((r) => r.algorithm === 'adaptive'),
+    base = rows.find((r) => r.algorithm === 'parallel');
+  const delta =
+    adaptive && base && base.metrics.goodput_kbps.mean > 0
+      ? (adaptive.metrics.goodput_kbps.mean / base.metrics.goodput_kbps.mean - 1) * 100
+      : null;
   const cfg = result.request.config;
-  $('#result-context').textContent = `Рассчитано: RTT ${fmt(cfg.rtt_ms)} мс · SNR ${fmt(cfg.snr_db)} дБ · ${cfg.harq_processes} процессов · ${cfg.channel} · ${fmt(cfg.simulation_time_ms / 1000)} с · ${result.request.repetitions} seed. Текущие поля конфигурации не изменяют сохранённый результат.`;
-  $('#metric-cards').innerHTML = metricCard('ЛУЧШИЙ GOODPUT', fmt(best.metrics.goodput_kbps.mean), 'кбит/с', short[best.algorithm]) + metricCard('ADAPTIVE К PARALLEL', delta == null ? '—' : `${delta > 0 ? '+' : ''}${fmt(delta, 1)}`, '%', 'По средним goodput · не тест значимости') + metricCard('ЗАГРУЗКА ЛУЧШЕЙ СТРАТЕГИИ', pct(best.metrics.utilization.mean), '', 'Доля занятого эфирного времени') + metricCard('P95 ЛУЧШЕЙ СТРАТЕГИИ', fmt(best.metrics.p95_latency_ms.mean, 0), 'мс', 'Первый успешный приём');
-  $('#goodput-chart').innerHTML = barChart(rows, 'goodput_kbps'); $('#latency-chart').innerHTML = barChart(rows, 'p95_latency_ms');
-  $('#metrics-table').innerHTML = rows.map(r => { const m = r.metrics; return `<tr><td><span class="table-dot color-${r.algorithm}">●</span>${escapeHTML(short[r.algorithm])}</td><td>${fmt(m.goodput_kbps.mean)}</td><td>${pct(m.bler.mean)}</td><td>${pct(m.resolved_loss_rate.mean)}</td><td>${fmt(m.p95_latency_ms.mean, 1)}</td><td>${pct(m.utilization.mean)}</td><td>${fmt(m.peak_memory_kb.mean)}</td><td>${fmt(m.censored.mean)}</td></tr>`; }).join('');
-  $('#trace-algorithm').innerHTML = result.request.algorithms.map(a => `<option value="${a}">${short[a]}</option>`).join('');
-  $('#trace-algorithm').value = result.request.algorithms.includes('adaptive') ? 'adaptive' : result.request.algorithms[0]; renderTrace(); window.labUI?.counters($('#metric-cards'));
+  $('#result-context').textContent =
+    `Рассчитано: RTT ${fmt(cfg.rtt_ms)} мс · SNR ${fmt(cfg.snr_db)} дБ · ${cfg.harq_processes} процессов · ${cfg.channel} · ${fmt(cfg.simulation_time_ms / 1000)} с · ${result.request.repetitions} seed. Текущие поля конфигурации не изменяют сохранённый результат.`;
+  $('#metric-cards').innerHTML =
+    metricCard('ЛУЧШИЙ GOODPUT', fmt(best.metrics.goodput_kbps.mean), 'кбит/с', short[best.algorithm]) +
+    metricCard(
+      'ADAPTIVE К PARALLEL',
+      delta == null ? '—' : `${delta > 0 ? '+' : ''}${fmt(delta, 1)}`,
+      '%',
+      'По средним goodput · не тест значимости'
+    ) +
+    metricCard(
+      'ЗАГРУЗКА ЛУЧШЕЙ СТРАТЕГИИ',
+      pct(best.metrics.utilization.mean),
+      '',
+      'Доля занятого эфирного времени'
+    ) +
+    metricCard(
+      'P95 ЛУЧШЕЙ СТРАТЕГИИ',
+      fmt(best.metrics.p95_latency_ms.mean, 0),
+      'мс',
+      'Первый успешный приём'
+    );
+  renderComparisonCharts(result);
+  $('#metrics-table').innerHTML = rows
+    .map((r) => {
+      const m = r.metrics;
+      return `<tr><td><span class="table-dot color-${r.algorithm}">●</span>${escapeHTML(short[r.algorithm])}</td><td>${fmt(m.goodput_kbps.mean)}</td><td>${pct(m.bler.mean)}</td><td>${pct(m.resolved_loss_rate.mean)}</td><td>${fmt(m.p95_latency_ms.mean, 1)}</td><td>${pct(m.utilization.mean)}</td><td>${fmt(m.peak_memory_kb.mean)}</td><td>${fmt(m.censored.mean)}</td></tr>`;
+    })
+    .join('');
+  $('#trace-algorithm').innerHTML = result.request.algorithms
+    .map((a) => `<option value="${a}">${short[a]}</option>`)
+    .join('');
+  $('#trace-algorithm').value = result.request.algorithms.includes('adaptive')
+    ? 'adaptive'
+    : result.request.algorithms[0];
+  renderTrace();
+  window.labUI?.counters($('#metric-cards'));
 }
 function renderSweep(result = state.result) {
-  const rows = result.summary;
-  const width = 1100, height = 420, left = 70, right = 35, top = 25, bottom = 55;
-  const xs = result.request.values, minX = Math.min(...xs), maxX = Math.max(...xs), span = maxX - minX || 1;
-  const maxY = Math.max(1, ...rows.map(r => r.metrics.goodput_kbps.ci_high ?? r.metrics.goodput_kbps.mean)) * 1.1;
-  const x = v => left + (v - minX) / span * (width - left - right), y = v => height - bottom - v / maxY * (height - top - bottom);
-  let svg = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${width} ${height}" role="img" aria-label="Зависимость goodput от ${result.request.axis}"><rect width="100%" height="100%" fill="${themeColor('--bg')}"/><text x="${left}" y="15" fill="${themeColor('--muted')}" font-size="11">Goodput, kbit/s · 95% CI</text>`;
-  for (let i = 0; i <= 5; i++) { const v = maxY * i / 5, yy = y(v); svg += `<line x1="${left}" x2="${width - right}" y1="${yy}" y2="${yy}" stroke="${themeColor('--line')}"/><text x="${left - 12}" y="${yy + 4}" text-anchor="end" fill="${themeColor('--muted')}" font-size="11">${fmt(v, 0)}</text>`; }
-  xs.forEach(v => { svg += `<text x="${x(v)}" y="${height - 30}" text-anchor="middle" fill="${themeColor('--muted')}" font-size="11">${v}</text>`; });
-  for (const algorithm of result.request.algorithms) {
-    const points = rows.filter(r => r.algorithm === algorithm).sort((a, b) => a.axis_value - b.axis_value);
-    svg += `<polyline class="chart-line" pathLength="1" points="${points.map(p => `${x(p.axis_value)},${y(p.metrics.goodput_kbps.mean)}`).join(' ')}" fill="none" stroke="${colors[algorithm]}" stroke-width="2.5"/>`;
-    for (const p of points) { const v = p.metrics.goodput_kbps, xx = x(p.axis_value); if (v.ci_low != null) { const lo = y(Math.max(0, v.ci_low)), hi = y(v.ci_high); svg += `<path d="M${xx},${lo} V${hi} M${xx - 4},${lo} h8 M${xx - 4},${hi} h8" stroke="${colors[algorithm]}" opacity=".7"/>`; } svg += `<circle cx="${xx}" cy="${y(v.mean)}" r="4" fill="${colors[algorithm]}" stroke="${themeColor('--fg')}" stroke-width=".6"><title>${short[algorithm]} · ${p.axis_value}: ${fmt(v.mean)} [${fmt(v.ci_low)}; ${fmt(v.ci_high)}]</title></circle>`; }
-  }
-  svg += `<text x="${width / 2}" y="${height - 7}" text-anchor="middle" fill="${themeColor('--muted')}" font-size="12">${result.request.axis}</text></svg>`;
-  $('#sweep-chart').classList.remove('empty-state'); $('#sweep-chart').innerHTML = svg;
-  $('#sweep-legend').replaceChildren(...result.request.algorithms.map(a => { const span = document.createElement('span'); const dot = document.createElement('i'); dot.style.backgroundColor = colors[a]; span.append(dot, short[a]); return span; }));
-  $('#sweep-table').innerHTML = rows.map(r => { const m = r.metrics, g = m.goodput_kbps; return `<tr><td>${short[r.algorithm]}</td><td>${r.axis_value}</td><td>${fmt(g.mean)}</td><td>[${fmt(g.ci_low)}; ${fmt(g.ci_high)}]</td><td>${pct(m.resolved_loss_rate.mean)}</td><td>${fmt(m.p95_latency_ms.mean)}</td></tr>`; }).join('');
+  configureAnalytics();
+  const spec =
+    window.HarqAnalytics.specs.find((s) => s.key === $('#sweep-metric').value) ||
+    window.HarqAnalytics.specs[0];
+  $('#sweep-chart-title').textContent = `${spec.title} — ${window.HarqAnalytics.axes[result.request.axis]}`;
+  $('#sweep-metric-help').textContent =
+    `${spec.direction}. ${spec.help} Усы — 95% ДИ по seed.${spec.factor === 100 ? ' Границы ДИ долей отображаются в пределах 0–100%, исходные значения доступны в подсказке и экспорте.' : ''}`;
+  $('#sweep-chart').classList.remove('empty-state');
+  $('#sweep-chart').innerHTML = window.HarqAnalytics.sweep(result, spec);
+  $('#sweep-legend').innerHTML = window.HarqAnalytics.legend(result.request.algorithms);
+  $('#sweep-metric-grid').innerHTML = window.HarqAnalytics.sweepGrid(result, spec.key);
+  $('#sweep-table').innerHTML = result.summary
+    .map((r) => {
+      const m = r.metrics,
+        g = m.goodput_kbps;
+      return `<tr><td>${short[r.algorithm]}</td><td>${r.axis_value}</td><td>${fmt(g.mean)}</td><td>[${fmt(g.ci_low)}; ${fmt(g.ci_high)}]</td><td>${pct(m.resolved_loss_rate.mean)}</td><td>${fmt(m.p95_latency_ms.mean)}</td></tr>`;
+    })
+    .join('');
 }
 function renderTrace() {
   if (!state.traceResult) return;
-  const run = state.traceResult.runs.find(r => r.algorithm === $('#trace-algorithm').value && r.repetition === 0);
+  const run = state.traceResult.runs.find(
+    (r) => r.algorithm === $('#trace-algorithm').value && r.repetition === 0
+  );
   if (!run) return;
-  const offset = Math.max(0, Number($('#trace-offset').value) || 0), span = Math.max(10, Number($('#trace-window').value) || 1600);
-  const trace = run.trace.filter(e => e.time_ms >= offset && e.time_ms <= offset + span);
-  const processes = [...new Set(trace.filter(e => e.process != null).map(e => e.process))].sort((a, b) => a - b).slice(0, 16);
-  const width = 1100, left = 65, top = 35, height = Math.max(130, processes.length * 42 + 70), x = t => left + (t - offset) / span * (width - left - 30);
+  const offset = Math.max(0, Number($('#trace-offset').value) || 0),
+    span = Math.max(10, Number($('#trace-window').value) || 1600);
+  const trace = run.trace.filter((e) => e.time_ms >= offset && e.time_ms <= offset + span);
+  const processes = [...new Set(trace.filter((e) => e.process != null).map((e) => e.process))]
+    .sort((a, b) => a - b)
+    .slice(0, 16);
+  const width = 1100,
+    left = 65,
+    top = 35,
+    height = Math.max(130, processes.length * 42 + 70),
+    x = (t) => left + ((t - offset) / span) * (width - left - 30);
   let svg = `<svg viewBox="0 0 ${width} ${height}" role="img" aria-label="Временная диаграмма HARQ"><title>Реальные события симуляции, первые 16 процессов в окне</title>`;
-  for (let i = 0; i <= 5; i++) { const xx = x(offset + i * span / 5); svg += `<line class="chart-gridline" x1="${xx}" x2="${xx}" y1="20" y2="${height - 25}"/><text class="chart-label" x="${xx}" y="${height - 5}" text-anchor="middle">${fmt(offset + i * span / 5, 0)} ms</text>`; }
-  processes.forEach((p, i) => { const yy = top + i * 42; svg += `<text class="chart-label" x="0" y="${yy + 4}">P${p}</text><line x1="${left}" x2="${width - 30}" y1="${yy}" y2="${yy}" stroke="${themeColor('--line')}" stroke-dasharray="3 4"/>`; for (const e of trace.filter(e => e.process === p)) { const xx = x(e.time_ms); if (e.event === 'TX_START') svg += `<rect x="${xx}" y="${yy - 8}" width="${Math.max(3, e.duration_ms / span * (width - left - 30))}" height="16" rx="2" fill="${e.attempt > 1 ? '#b6ff00' : themeColor('--fg')}"><title>TX P${p} packet ${e.packet} attempt ${e.attempt} @ ${e.time_ms}ms</title></rect>`; else if (e.event.startsWith('RX_')) svg += `<circle cx="${xx}" cy="${yy}" r="4" fill="${e.event === 'RX_NACK' ? themeColor('--muted') : '#b6ff00'}" stroke="${themeColor('--fg')}" stroke-width=".5"><title>${e.event} ${e.time_ms}ms</title></circle>`; else if (['ACK', 'NACK', 'TIMEOUT', 'DROP'].includes(e.event)) svg += `<path d="M${xx},${yy - 5} l5,5 l-5,5 l-5,-5 Z" fill="${e.event === 'ACK' ? '#b6ff00' : themeColor('--muted')}"><title>${e.event} ${e.time_ms}ms</title></path>`; } });
-  $('#timeline-chart').classList.remove('empty-state'); $('#timeline-chart').innerHTML = svg + '</svg>';
-  $('#trace-count').textContent = `${trace.length} в окне · сохранено ${run.trace.length}${run.trace_truncated ? ' · трасса ограничена' : ''} · до 16 процессов`;
-  $('#trace-table').innerHTML = trace.slice(0, 400).map(e => `<tr><td>${fmt(e.time_ms, 3)}</td><td>${escapeHTML(e.event)}</td><td>${e.process ?? '—'}</td><td>${e.packet ?? '—'}</td><td>${e.attempt ?? '—'}</td><td>${escapeHTML(e.mode ?? '—')}</td></tr>`).join('');
+  for (let i = 0; i <= 5; i++) {
+    const xx = x(offset + (i * span) / 5);
+    svg += `<line class="chart-gridline" x1="${xx}" x2="${xx}" y1="20" y2="${height - 25}"/><text class="chart-label" x="${xx}" y="${height - 5}" text-anchor="middle">${fmt(offset + (i * span) / 5, 0)} ms</text>`;
+  }
+  processes.forEach((p, i) => {
+    const yy = top + i * 42;
+    svg += `<text class="chart-label" x="0" y="${yy + 4}">P${p}</text><line x1="${left}" x2="${width - 30}" y1="${yy}" y2="${yy}" stroke="${themeColor('--line')}" stroke-dasharray="3 4"/>`;
+    for (const e of trace.filter((e) => e.process === p)) {
+      const xx = x(e.time_ms);
+      if (e.event === 'TX_START')
+        svg += `<rect x="${xx}" y="${yy - 8}" width="${Math.max(3, (e.duration_ms / span) * (width - left - 30))}" height="16" rx="2" fill="${e.attempt > 1 ? '#b6ff00' : themeColor('--fg')}"><title>TX P${p} packet ${e.packet} attempt ${e.attempt} @ ${e.time_ms}ms</title></rect>`;
+      else if (e.event.startsWith('RX_'))
+        svg += `<circle cx="${xx}" cy="${yy}" r="4" fill="${e.event === 'RX_NACK' ? themeColor('--muted') : '#b6ff00'}" stroke="${themeColor('--fg')}" stroke-width=".5"><title>${e.event} ${e.time_ms}ms</title></circle>`;
+      else if (['ACK', 'NACK', 'TIMEOUT', 'DROP'].includes(e.event))
+        svg += `<path d="M${xx},${yy - 5} l5,5 l-5,5 l-5,-5 Z" fill="${e.event === 'ACK' ? '#b6ff00' : themeColor('--muted')}"><title>${e.event} ${e.time_ms}ms</title></path>`;
+    }
+  });
+  $('#timeline-chart').classList.remove('empty-state');
+  $('#timeline-chart').innerHTML = svg + '</svg>';
+  $('#trace-count').textContent =
+    `${trace.length} в окне · сохранено ${run.trace.length}${run.trace_truncated ? ' · трасса ограничена' : ''} · до 16 процессов`;
+  $('#trace-table').innerHTML = trace
+    .slice(0, 400)
+    .map(
+      (e) =>
+        `<tr><td>${fmt(e.time_ms, 3)}</td><td>${escapeHTML(e.event)}</td><td>${e.process ?? '—'}</td><td>${e.packet ?? '—'}</td><td>${e.attempt ?? '—'}</td><td>${escapeHTML(e.mode ?? '—')}</td></tr>`
+    )
+    .join('');
 }
 async function refreshHistory() {
   try {
-    const jobs = await api('/api/jobs'); $('#history-count').textContent = jobs.length;
-    const labels = { completed: 'Завершён', running: 'Выполняется', queued: 'В очереди', failed: 'Ошибка', cancelled: 'Остановлен', interrupted: 'Прерван' };
-    $('#history-table').innerHTML = jobs.length ? jobs.map(j => `<tr><td>${escapeHTML(j.name)}</td><td>${new Date(j.created).toLocaleString('ru-RU')}</td><td class="status-${j.status}">${labels[j.status] || j.status}</td><td>${pct(j.progress)}</td><td><button class="secondary-button" data-open="${j.id}">Открыть ↗</button></td></tr>`).join('') : '<tr><td colspan="5">Пока нет сохранённых экспериментов</td></tr>';
-    $$('[data-open]').forEach(el => el.addEventListener('click', () => openJob(el.dataset.open)));
-  } catch (error) { toast(readable(error), true); }
+    const jobs = await api('/api/jobs');
+    $('#history-count').textContent = jobs.length;
+    const labels = {
+      completed: 'Завершён',
+      running: 'Выполняется',
+      queued: 'В очереди',
+      failed: 'Ошибка',
+      cancelled: 'Остановлен',
+      interrupted: 'Прерван',
+    };
+    $('#history-table').innerHTML = jobs.length
+      ? jobs
+          .map(
+            (j) =>
+              `<tr><td>${escapeHTML(j.name)}</td><td>${new Date(j.created).toLocaleString('ru-RU')}</td><td class="status-${j.status}">${labels[j.status] || j.status}</td><td>${pct(j.progress)}</td><td><button class="secondary-button" data-open="${j.id}">Открыть ↗</button></td></tr>`
+          )
+          .join('')
+      : '<tr><td colspan="5">Пока нет сохранённых экспериментов</td></tr>';
+    $$('[data-open]').forEach((el) => el.addEventListener('click', () => openJob(el.dataset.open)));
+  } catch (error) {
+    toast(readable(error), true);
+  }
 }
 async function openJob(id) {
   try {
     if (state.pending) throw new Error('Дождитесь завершения текущего расчёта или остановите его.');
-    const job = await api(`/api/jobs/${id}`); state.job = id;
-    populate(job.request.config); $('#repetitions').value = job.request.repetitions;
-    $$('input[name="algorithm"]').forEach(input => { input.checked = job.request.algorithms.includes(input.value); });
+    const job = await api(`/api/jobs/${id}`);
+    state.job = id;
+    populate(job.request.config);
+    $('#repetitions').value = job.request.repetitions;
+    $$('input[name="algorithm"]').forEach((input) => {
+      input.checked = job.request.algorithms.includes(input.value);
+    });
     $('#algorithm-count').textContent = `${job.request.algorithms.length} ВЫБРАНО`;
-    $$('.preset').forEach(el => el.classList.remove('selected'));
-    if (job.result) { state.result = job.result; renderResults(); setView(job.request.axis ? 'sweep' : 'overview'); }
-    else if (['queued', 'running'].includes(job.status)) { busy(true); setView('overview'); poll(); }
-    else toast(job.message, job.status === 'failed');
-  } catch (error) { toast(readable(error), true); }
+    $$('.preset').forEach((el) => el.classList.remove('selected'));
+    if (job.result) {
+      state.result = job.result;
+      renderResults();
+      setView(job.request.axis ? 'sweep' : 'overview');
+    } else if (['queued', 'running'].includes(job.status)) {
+      busy(true);
+      setView('overview');
+      poll();
+    } else toast(job.message, job.status === 'failed');
+  } catch (error) {
+    toast(readable(error), true);
+  }
 }
 async function save(format, content) {
-  if (window.harq) { const saved = await window.harq.save(format, content); if (saved) toast('Файл сохранён.'); return; }
-  const blob = new Blob([content], { type: format === 'svg' ? 'image/svg+xml' : 'text/plain;charset=utf-8' }); const url = URL.createObjectURL(blob); const link = document.createElement('a'); link.href = url; link.download = `harq-experiment.${format}`; link.click(); setTimeout(() => URL.revokeObjectURL(url), 5000);
+  if (window.harq) {
+    const saved = await window.harq.save(format, content);
+    if (saved) toast('Файл сохранён.');
+    return;
+  }
+  const blob = new Blob([content], { type: format === 'svg' ? 'image/svg+xml' : 'text/plain;charset=utf-8' });
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement('a');
+  link.href = url;
+  link.download = `harq-experiment.${format}`;
+  link.click();
+  setTimeout(() => URL.revokeObjectURL(url), 5000);
 }
-async function exportResult(format) { try { if (!state.job || !state.result || state.pending) throw new Error('Сначала завершите эксперимент.'); const id = state.view === 'sweep' ? state.sweepJob : state.overviewJob; if (!id) throw new Error('Нет результатов для этого раздела.'); const content = await api(`/api/jobs/${id}/export/${format}`); await save(format, content); } catch (error) { toast(readable(error), true); } }
+async function exportResult(format) {
+  try {
+    if (!state.job || !state.result || state.pending) throw new Error('Сначала завершите эксперимент.');
+    const id = state.view === 'sweep' ? state.sweepJob : state.overviewJob;
+    if (!id) throw new Error('Нет результатов для этого раздела.');
+    const content = await api(`/api/jobs/${id}/export/${format}`);
+    await save(format, content);
+  } catch (error) {
+    toast(readable(error), true);
+  }
+}
 async function init() {
   updatePalette();
+  configureAnalytics();
+  $('#sweep-metric').innerHTML = window.HarqAnalytics.specs
+    .map((s) => `<option value="${s.key}">${s.title}, ${s.unit}</option>`)
+    .join('');
+  $('#sweep-metric').addEventListener('change', () => {
+    if (state.sweepResult) renderSweep(state.sweepResult);
+  });
+  $$('[data-chart-filter]').forEach((button) =>
+    button.addEventListener('click', () => applyChartFilter(button.dataset.chartFilter))
+  );
   window.addEventListener('harq:theme', () => {
     updatePalette();
     if (state.traceResult) {
-      $('#goodput-chart').innerHTML = barChart(state.traceResult.summary, 'goodput_kbps');
-      $('#latency-chart').innerHTML = barChart(state.traceResult.summary, 'p95_latency_ms');
+      renderComparisonCharts(state.traceResult);
       renderTrace();
     }
     if (state.sweepResult) renderSweep(state.sweepResult);
   });
-  document.addEventListener('keydown', event => {
+  document.addEventListener('keydown', (event) => {
     if ((event.metaKey || event.ctrlKey) && event.key === 'Enter' && !state.pending && state.defaults) {
-      event.preventDefault(); launch(state.view === 'sweep');
+      event.preventDefault();
+      launch(state.view === 'sweep');
     }
   });
   $('#show-progress').addEventListener('click', () => {
     setView('overview', false);
-    $('#results-anchor').scrollIntoView({ behavior: window.labUI?.reducedMotion() ? 'instant' : 'smooth', block: 'start' });
+    $('#results-anchor').scrollIntoView({
+      behavior: window.labUI?.reducedMotion() ? 'instant' : 'smooth',
+      block: 'start',
+    });
   });
-  $$('.nav-item').forEach(el => el.addEventListener('click', () => setView(el.dataset.view)));
-  $('#config-form').addEventListener('submit', e => e.preventDefault());
-  $('#config-form').addEventListener('input', () => { $$('.preset').forEach(el => { el.classList.remove('selected'); el.setAttribute('aria-pressed', 'false'); }); updateCapacity(); });
-  $('#run').addEventListener('click', () => launch()); $('#run-sweep').addEventListener('click', () => launch(true));
-  $('#cancel').addEventListener('click', async () => { try { await api(`/api/jobs/${state.job}/cancel`, 'POST'); } catch (error) { toast(readable(error), true); } });
+  $$('.nav-item').forEach((el) => el.addEventListener('click', () => setView(el.dataset.view)));
+  $('#config-form').addEventListener('submit', (e) => e.preventDefault());
+  $('#config-form').addEventListener('input', () => {
+    $$('.preset').forEach((el) => {
+      el.classList.remove('selected');
+      el.setAttribute('aria-pressed', 'false');
+    });
+    updateCapacity();
+  });
+  $('#run').addEventListener('click', () => launch());
+  $('#run-sweep').addEventListener('click', () => launch(true));
+  $('#cancel').addEventListener('click', async () => {
+    try {
+      await api(`/api/jobs/${state.job}/cancel`, 'POST');
+    } catch (error) {
+      toast(readable(error), true);
+    }
+  });
   $('#refresh-history').addEventListener('click', refreshHistory);
-  $('#trace-update').addEventListener('click', renderTrace); $('#trace-algorithm').addEventListener('change', renderTrace);
-  $$('[data-export]').forEach(el => el.addEventListener('click', () => exportResult(el.dataset.export)));
-  $('#export-svg').addEventListener('click', async () => { try { const svg = $('#sweep-chart svg'); if (!svg) throw new Error('Сначала выполните серию.'); await save('svg', new XMLSerializer().serializeToString(svg)); } catch (error) { toast(readable(error), true); } });
-  const recipes = { rtt_ms: [5, 20, 50, 100, 200, 500, 600], snr_db: [-6, -4, -2, 0, 2, 4, 6, 8], harq_processes: [1, 8, 16, 32, 64, 128, 256, 512], max_transmissions: [1, 2, 3, 4, 6, 8], memory_mb: [0.01, 0.05, 0.1, 0.5, 1, 4, 16] };
-  $('#sweep-axis').addEventListener('change', () => { $('#sweep-values').value = recipes[$('#sweep-axis').value].join(', '); });
-  $$('[data-recipe]').forEach(el => el.addEventListener('click', () => { $('#sweep-axis').value = el.dataset.recipe; $('#sweep-values').value = recipes[el.dataset.recipe].join(', '); }));
+  $('#trace-update').addEventListener('click', renderTrace);
+  $('#trace-algorithm').addEventListener('change', renderTrace);
+  $$('[data-export]').forEach((el) => el.addEventListener('click', () => exportResult(el.dataset.export)));
+  $('#export-svg').addEventListener('click', async () => {
+    try {
+      const svg = $('#sweep-chart svg');
+      if (!svg) throw new Error('Сначала выполните серию.');
+      await save('svg', new XMLSerializer().serializeToString(svg));
+    } catch (error) {
+      toast(readable(error), true);
+    }
+  });
+  const recipes = {
+    rtt_ms: [5, 20, 50, 100, 200, 500, 600],
+    snr_db: [-6, -4, -2, 0, 2, 4, 6, 8],
+    harq_processes: [1, 8, 16, 32, 64, 128, 256, 512],
+    max_transmissions: [1, 2, 3, 4, 6, 8],
+    memory_mb: [0.01, 0.05, 0.1, 0.5, 1, 4, 16],
+  };
+  $('#sweep-axis').addEventListener('change', () => {
+    $('#sweep-values').value = recipes[$('#sweep-axis').value].join(', ');
+  });
+  $$('[data-recipe]').forEach((el) =>
+    el.addEventListener('click', () => {
+      $('#sweep-axis').value = el.dataset.recipe;
+      $('#sweep-values').value = recipes[el.dataset.recipe].join(', ');
+    })
+  );
   try {
-    const data = await api('/api/bootstrap'); Object.assign(state, { defaults: data.defaults, presets: data.presets, algorithms: data.algorithms });
-    populate(state.defaults); renderAlgorithms(); $('#connection-text').textContent = 'Python engine подключён';
-    $$('.preset').forEach(el => el.addEventListener('click', () => {
-      $$('.preset').forEach(p => { p.classList.toggle('selected', p === el); p.setAttribute('aria-pressed', String(p === el)); });
-      const current = { ...state.defaults };
-      for (const input of $('#config-form').elements) if (input.name) current[input.name] = input.type === 'number' ? Number(input.value) : input.value;
-      populate({ ...current, ...state.presets[el.dataset.preset] });
-    }));
+    const data = await api('/api/bootstrap');
+    Object.assign(state, { defaults: data.defaults, presets: data.presets, algorithms: data.algorithms });
+    populate(state.defaults);
+    renderAlgorithms();
+    $('#connection-text').textContent = 'Python engine подключён';
+    $$('.preset').forEach((el) =>
+      el.addEventListener('click', () => {
+        $$('.preset').forEach((p) => {
+          p.classList.toggle('selected', p === el);
+          p.setAttribute('aria-pressed', String(p === el));
+        });
+        const current = { ...state.defaults };
+        for (const input of $('#config-form').elements)
+          if (input.name) current[input.name] = input.type === 'number' ? Number(input.value) : input.value;
+        populate({ ...current, ...state.presets[el.dataset.preset] });
+      })
+    );
     $('#reset').addEventListener('click', () => {
-      $$('.preset').forEach(p => { p.classList.toggle('selected', p.dataset.preset === 'geo'); p.setAttribute('aria-pressed', String(p.dataset.preset === 'geo')); });
-      populate(state.defaults); toast('Параметры сброшены к сценарию GEO.');
+      $$('.preset').forEach((p) => {
+        p.classList.toggle('selected', p.dataset.preset === 'geo');
+        p.setAttribute('aria-pressed', String(p.dataset.preset === 'geo'));
+      });
+      populate(state.defaults);
+      toast('Параметры сброшены к сценарию GEO.');
     });
     await refreshHistory();
-  } catch (error) { $('#connection-text').textContent = 'Симулятор недоступен'; $('#connection-dot').classList.add('offline'); busy(true); toast(readable(error), true); }
+  } catch (error) {
+    $('#connection-text').textContent = 'Симулятор недоступен';
+    $('#connection-dot').classList.add('offline');
+    busy(true);
+    toast(readable(error), true);
+  }
 }
 init();

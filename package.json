@@ -5,15 +5,18 @@
   "description": "Desktop laboratory for delay-aware HARQ research",
   "main": "desktop/main.cjs",
   "scripts": {
+    "test:charts": "node --test tests/charts.test.cjs",
+    "format": "prettier --write 'desktop/**/*.{js,cjs,css,html}' 'tests/ui/*.cjs' 'scripts/*.cjs' '*.cjs' '*.json'",
     "start": "node scripts/start-desktop.cjs",
     "test:ui": "playwright test",
-    "check": "node --check desktop/main.cjs && node --check desktop/preload.cjs && node --check desktop/renderer/appearance.js && node --check desktop/renderer/app.js",
+    "check": "node --check desktop/main.cjs && node --check desktop/preload.cjs && node --check desktop/renderer/analytics.js && node --check desktop/renderer/appearance.js && node --check desktop/renderer/app.js",
     "dist": "electron-builder --dir"
   },
   "devDependencies": {
     "@playwright/test": "1.65.1",
     "electron": "45.3.2",
-    "electron-builder": "^26.0.12"
+    "electron-builder": "^26.0.12",
+    "prettier": "^3.6.2"
   },
   "overrides": {
     "minimatch": "^11.0.8"
@@ -21,9 +24,20 @@
   "build": {
     "appId": "research.harq.lab",
     "productName": "HARQ Lab",
-    "directories": { "output": "desktop/dist" },
+    "directories": {
+      "output": "desktop/dist"
+    },
     "asar": false,
-    "files": ["desktop/**/*", "!desktop/dist/**", "harq_lab/**/*", "pyproject.toml", "uv.lock", "package.json"],
-    "mac": { "category": "public.app-category.education" }
+    "files": [
+      "desktop/**/*",
+      "!desktop/dist/**",
+      "harq_lab/**/*",
+      "pyproject.toml",
+      "uv.lock",
+      "package.json"
+    ],
+    "mac": {
+      "category": "public.app-category.education"
+    }
   }
 }

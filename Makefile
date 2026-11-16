@@ -10,6 +10,7 @@ test:
 	uv run pytest -q
 	uv run ruff check harq_lab tests
 	npm run check
+	npm run test:charts
 	npm run test:ui
 study:
 	sh scripts/run-study.sh
