@@ -2411,3 +2411,14 @@ select {
 .algorithm-text strong {
   color: var(--fg);
 }
+.experiment-estimate {
+  font-size: 0.68rem;
+  line-height: 1.7;
+  color: var(--muted);
+  margin: 1rem 0 0.5rem;
+}
+.experiment-estimate.estimate-error {
+  color: var(--fg);
+  border-left: 3px solid var(--accent);
+  padding-left: 0.8rem;
+}

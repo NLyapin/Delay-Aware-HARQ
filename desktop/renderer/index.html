@@ -340,6 +340,7 @@
                   <input id="repetitions" type="number" min="1" max="30" value="3" /></label
                 ><span>95% ДИ по независимым прогонам</span>
               </div>
+              <p id="comparison-estimate" class="experiment-estimate" aria-live="polite"></p>
               <button id="run" class="primary-button">
                 <span>▶</span> Запустить сравнение <span>↗</span>
               </button>
@@ -465,6 +466,7 @@
                   value="5, 20, 50, 100, 200, 500, 600" /></label
               ><button id="run-sweep" class="primary-button">▶ Запустить серию</button>
             </div>
+            <p id="sweep-estimate" class="experiment-estimate" aria-live="polite"></p>
             <div class="experiment-recipes">
               <button data-recipe="rtt_ms">↗ Влияние RTT</button
               ><button data-recipe="snr_db">∿ Сравнение CC и IR</button

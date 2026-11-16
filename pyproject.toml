@@ -11,6 +11,7 @@ dependencies = ["numpy>=2.0,<3", "scipy>=1.13,<2", "matplotlib>=3.9,<4", "fastap
 
 [project.optional-dependencies]
 dev = ["pytest>=8,<10", "httpx>=0.27,<1", "ruff>=0.9,<1"]
+hardware = ["pyadi-iio>=0.0.20,<1", "pylibiio>=0.25,<1"]
 
 [project.scripts]
 harq-lab = "harq_lab.cli:main"

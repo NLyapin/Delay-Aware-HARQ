@@ -48,3 +48,26 @@ def test_api_auth(tmp_path, monkeypatch):
         assert client.get("/api/health").status_code == 401
         assert client.get("/api/health", headers={"X-HARQ-Token": "test-secret"}).status_code == 200
     app.state.worker.shutdown()
+
+
+def test_api_accepts_user_720_run_request_and_exposes_limits(tmp_path, monkeypatch):
+    from harq_lab.experiments import EXPERIMENT_LIMITS
+
+    def record_request(request, progress, cancelled):
+        return {"accepted_runs": len(request.values) * len(request.algorithms) * request.repetitions}
+
+    monkeypatch.setattr("harq_lab.api.run_experiment", record_request)
+    app = create_app(tmp_path / "large.sqlite3")
+    with TestClient(app) as client:
+        assert client.get("/api/bootstrap").json()["limits"] == EXPERIMENT_LIMITS
+        response = client.post(
+            "/api/jobs", json={"axis": "snr_db", "values": [-6, -4, -2, 0, 2, 4, 6, 8], "repetitions": 18}
+        )
+        assert response.status_code == 202, response.text
+        id = response.json()["id"]
+        for _ in range(100):
+            job = client.get(f"/api/jobs/{id}").json()
+            if job["status"] == "completed":
+                break
+            time.sleep(0.01)
+        assert job["result"]["accepted_runs"] == 720

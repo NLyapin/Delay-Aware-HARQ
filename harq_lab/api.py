@@ -12,7 +12,8 @@ from fastapi.responses import Response
 from fastapi.staticfiles import StaticFiles
 
 from .config import ALGORITHMS, LABELS, PRESETS, SimulationConfig
-from .experiments import ExperimentRequest, run_experiment
+from .experiments import EXPERIMENT_LIMITS, ExperimentRequest, run_experiment
+from .hardware.service import HardwareService, register_hardware_routes
 from .reporting import csv_export, markdown_report
 from .simulator import SimulationCancelled
 from .storage import Repository
@@ -21,6 +22,7 @@ from .storage import Repository
 def create_app(db_path: Path | None = None) -> FastAPI:
     repo = Repository(db_path or Path(os.environ.get("HARQ_DB", "results/harq.sqlite3")))
     worker = ThreadPoolExecutor(max_workers=1, thread_name_prefix="harq-research")
+    hardware = HardwareService()
     flags: dict[str, threading.Event] = {}
     lock = threading.Lock()
     token = os.environ.get("HARQ_API_TOKEN", "")
@@ -32,6 +34,7 @@ def create_app(db_path: Path | None = None) -> FastAPI:
             for flag in flags.values():
                 flag.set()
         worker.shutdown(wait=True)
+        hardware.close()
 
     app = FastAPI(title="HARQ Lab", version="1.0.0", lifespan=lifespan)
 
@@ -50,6 +53,8 @@ def create_app(db_path: Path | None = None) -> FastAPI:
     def health():
         return {"status": "ok", "version": "1.0.0"}
 
+    register_hardware_routes(app, hardware)
+
     @app.get("/api/bootstrap")
     def bootstrap():
         return {
@@ -57,6 +62,7 @@ def create_app(db_path: Path | None = None) -> FastAPI:
             "presets": PRESETS,
             "algorithms": [{"id": a, "label": LABELS[a]} for a in ALGORITHMS],
             "schema": SimulationConfig.model_json_schema(),
+            "limits": EXPERIMENT_LIMITS,
         }
 
     @app.get("/api/jobs")

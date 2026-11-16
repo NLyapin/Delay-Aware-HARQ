@@ -14,6 +14,12 @@ from .config import ALGORITHMS, Algorithm, SimulationConfig
 from .simulator import SimulationCancelled, simulate
 
 AXES = {"rtt_ms", "snr_db", "harq_processes", "max_transmissions", "memory_mb"}
+MAX_EXPERIMENT_RUNS = 2000
+MAX_POTENTIAL_TRANSMISSIONS = 20_000_000
+EXPERIMENT_LIMITS = {
+    "max_runs": MAX_EXPERIMENT_RUNS,
+    "max_potential_transmissions": MAX_POTENTIAL_TRANSMISSIONS,
+}
 
 
 class ExperimentRequest(BaseModel):
@@ -36,11 +42,18 @@ class ExperimentRequest(BaseModel):
         for value in self.values:
             SimulationConfig.model_validate({**self.config.model_dump(), self.axis: value})
         runs = len(self.algorithms) * max(1, len(self.values)) * self.repetitions
-        if runs > 400:
-            raise ValueError("Не более 400 прогонов на эксперимент")
+        if runs > MAX_EXPERIMENT_RUNS:
+            raise ValueError(
+                f"Запрошено {runs} прогонов; допустимо не более {MAX_EXPERIMENT_RUNS}. "
+                "Уменьшите число значений, алгоритмов или повторений"
+            )
         slots = self.config.simulation_time_ms / (self.config.slot_ms * self.config.ir_fraction)
-        if slots * runs > 20_000_000:
-            raise ValueError("Бюджет эксперимента превышает 20 млн потенциальных передач")
+        if slots * runs > MAX_POTENTIAL_TRANSMISSIONS:
+            raise ValueError(
+                f"Бюджет эксперимента: {slots * runs / 1e6:.2f} млн потенциальных передач "
+                f"при лимите {MAX_POTENTIAL_TRANSMISSIONS / 1e6:g} млн. "
+                "Уменьшите длительность прогона или число повторений"
+            )
         if self.config.seed + self.repetitions > 2**32:
             raise ValueError("Переполнение диапазона seed")
         return self

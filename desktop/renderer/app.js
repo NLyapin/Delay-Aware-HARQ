@@ -88,7 +88,11 @@ function toast(message, error = false) {
   toast.timer = setTimeout(() => el.classList.add('hidden'), error ? 16000 : 4500);
 }
 async function api(endpoint, method = 'GET', body = null) {
-  if (window.harq) return window.harq.request(endpoint, method, body);
+  if (window.harq) {
+    const result = await window.harq.request(endpoint, method, body);
+    if (result?.__harq_error) throw new Error(result.__harq_error);
+    return result;
+  }
   const response = await fetch(endpoint, {
     method,
     ...(body !== null ? { headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) } : {}),
@@ -98,9 +102,16 @@ async function api(endpoint, method = 'GET', body = null) {
 }
 function readable(error) {
   try {
-    const value = JSON.parse(error.message);
+    const text = error.message || String(error);
+    const start = text.indexOf('{');
+    const value = JSON.parse(start < 0 ? text : text.slice(start, text.lastIndexOf('}') + 1));
     if (Array.isArray(value.detail))
-      return value.detail.map((e) => `${e.loc.slice(1).join('.')}: ${e.msg}`).join('\n');
+      return value.detail
+        .map((e) => {
+          const field = (e.loc || []).slice(1).join('.');
+          return `${field ? field + ': ' : ''}${e.msg.replace(/^Value error, /, '')}`;
+        })
+        .join('\n');
     return value.detail || error.message;
   } catch {
     return error.message;
@@ -125,6 +136,7 @@ function populate(config) {
   for (const input of $('#config-form').elements)
     if (input.name && config[input.name] !== undefined) input.value = config[input.name];
   updateCapacity();
+  updateExperimentEstimates();
 }
 function config() {
   const invalid = [...$('#config-form').elements].find((el) => el.willValidate && !el.checkValidity());
@@ -162,8 +174,54 @@ function renderAlgorithms() {
   $$('input[name="algorithm"]').forEach((el) =>
     el.addEventListener('change', () => {
       $('#algorithm-count').textContent = `${$$('input[name="algorithm"]:checked').length} ВЫБРАНО`;
+      updateExperimentEstimates();
     })
   );
+}
+function experimentEstimate(sweep = false) {
+  const algorithms = $$('input[name="algorithm"]:checked').length;
+  const repeats = Number($('#repetitions').value);
+  const text = $('#sweep-values').value.trim();
+  const values = sweep ? text.split(',').map((s) => s.trim()) : ['single'];
+  const form = $('#config-form').elements;
+  const slots =
+    Number(form.simulation_time_ms.value) / (Number(form.slot_ms.value) * Number(form.ir_fraction.value));
+  const runs = values.length * algorithms * repeats;
+  const potential = slots * runs;
+  const limits = state.limits || { max_runs: 400, max_potential_transmissions: 20000000 };
+  let error = '';
+  if (!algorithms) error = 'Выберите хотя бы один алгоритм.';
+  else if (!Number.isInteger(repeats) || repeats < 1 || repeats > 30)
+    error = 'Число повторений должно быть от 1 до 30.';
+  else if (sweep && (!text || values.some((v) => !v || !Number.isFinite(Number(v)))))
+    error = 'Введите числовые значения оси через запятую.';
+  else if (sweep && new Set(values.map(Number)).size !== values.length)
+    error = 'Значения оси не должны повторяться.';
+  else if (values.length > 25) error = 'Допустимо не более 25 значений оси.';
+  else if (!Number.isFinite(slots) || slots <= 0)
+    error = 'Проверьте длительность прогона и передачи в конфигурации.';
+  else if (runs > limits.max_runs)
+    error = `Запрошено ${runs} прогонов; лимит — ${limits.max_runs}. Уменьшите число значений, алгоритмов или повторений.`;
+  else if (potential > limits.max_potential_transmissions)
+    error = `Бюджет ${fmt(potential / 1e6)} млн превышает лимит ${fmt(limits.max_potential_transmissions / 1e6)} млн потенциальных передач. Уменьшите длительность прогона или число повторений.`;
+  return {
+    runs,
+    potential,
+    error,
+    description: `${sweep ? `${values.length} значений × ` : ''}${algorithms} алгоритмов × ${repeats} повторений = ${runs} прогонов · ${fmt(potential / 1e6)} / ${fmt(limits.max_potential_transmissions / 1e6)} млн потенциальных передач. Лимит: ${limits.max_runs} прогонов.`,
+  };
+}
+function updateExperimentEstimates() {
+  if (!state.defaults) return;
+  for (const [sweep, id, button] of [
+    [false, '#comparison-estimate', '#run'],
+    [true, '#sweep-estimate', '#run-sweep'],
+  ]) {
+    const estimate = experimentEstimate(sweep);
+    $(id).textContent = estimate.error || estimate.description;
+    $(id).classList.toggle('estimate-error', Boolean(estimate.error));
+    $(button).disabled = state.pending || Boolean(estimate.error);
+  }
 }
 function busy(value) {
   state.pending = value;
@@ -174,6 +232,7 @@ function busy(value) {
   $('#run').innerHTML = value
     ? '<span class="busy-glyph">↗</span> Выполняется расчёт <span>···</span>'
     : '<span>▶</span> Запустить сравнение <span>↗</span>';
+  updateExperimentEstimates();
 }
 async function launch(sweep = false) {
   try {
@@ -193,6 +252,8 @@ async function launch(sweep = false) {
         throw new Error('Введите числовые значения через запятую. Десятичный разделитель — точка.');
       request.values = text.split(',').map((v) => Number(v.trim()));
     }
+    const estimate = experimentEstimate(sweep);
+    if (estimate.error) throw new Error(estimate.error);
     busy(true);
     const job = await api('/api/jobs', 'POST', request);
     state.job = job.id;
@@ -427,6 +488,11 @@ async function openJob(id) {
       input.checked = job.request.algorithms.includes(input.value);
     });
     $('#algorithm-count').textContent = `${job.request.algorithms.length} ВЫБРАНО`;
+    if (job.request.axis) {
+      $('#sweep-axis').value = job.request.axis;
+      $('#sweep-values').value = job.request.values.join(', ');
+    }
+    updateExperimentEstimates();
     $$('.preset').forEach((el) => el.classList.remove('selected'));
     if (job.result) {
       state.result = job.result;
@@ -469,6 +535,10 @@ async function exportResult(format) {
 async function init() {
   updatePalette();
   configureAnalytics();
+  $('#config-form').addEventListener('input', updateExperimentEstimates);
+  $('#config-form').addEventListener('change', updateExperimentEstimates);
+  $('#repetitions').addEventListener('input', updateExperimentEstimates);
+  $('#sweep-values').addEventListener('input', updateExperimentEstimates);
   $('#sweep-metric').innerHTML = window.HarqAnalytics.specs
     .map((s) => `<option value="${s.key}">${s.title}, ${s.unit}</option>`)
     .join('');
@@ -539,18 +609,26 @@ async function init() {
   };
   $('#sweep-axis').addEventListener('change', () => {
     $('#sweep-values').value = recipes[$('#sweep-axis').value].join(', ');
+    updateExperimentEstimates();
   });
   $$('[data-recipe]').forEach((el) =>
     el.addEventListener('click', () => {
       $('#sweep-axis').value = el.dataset.recipe;
       $('#sweep-values').value = recipes[el.dataset.recipe].join(', ');
+      updateExperimentEstimates();
     })
   );
   try {
     const data = await api('/api/bootstrap');
-    Object.assign(state, { defaults: data.defaults, presets: data.presets, algorithms: data.algorithms });
+    Object.assign(state, {
+      defaults: data.defaults,
+      presets: data.presets,
+      algorithms: data.algorithms,
+      limits: data.limits,
+    });
     populate(state.defaults);
     renderAlgorithms();
+    updateExperimentEstimates();
     $('#connection-text').textContent = 'Python engine подключён';
     $$('.preset').forEach((el) =>
       el.addEventListener('click', () => {

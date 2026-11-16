@@ -77,6 +77,8 @@ async function startBackend() {
 }
 
 function validPath(endpoint, method) {
+  if (method === 'GET' && /^\/api\/hardware\/(capabilities|jobs\/[a-f0-9]{32})$/.test(endpoint)) return true;
+  if (method === 'POST' && /^\/api\/hardware\/(probe|jobs(?:\/[a-f0-9]{32}\/cancel)?|remote)$/.test(endpoint)) return true;
   if (method === 'GET')
     return /^\/api\/(health|bootstrap|jobs(?:\/[a-f0-9]{32}(?:\/export\/(json|csv|md))?)?)$/.test(endpoint);
   return method === 'POST' && /^\/api\/jobs(?:\/[a-f0-9]{32}\/cancel)?$/.test(endpoint);
@@ -85,13 +87,18 @@ function validPath(endpoint, method) {
 ipcMain.handle('harq:request', async (event, endpoint, method = 'GET', body = null) => {
   if (event.sender !== window?.webContents || !validPath(endpoint, method))
     throw new Error('Недопустимый запрос');
-  const response = await fetch(`${baseURL}${endpoint}`, {
-    method,
-    headers: { 'Content-Type': 'application/json', 'X-HARQ-Token': token },
-    ...(body !== null ? { body: JSON.stringify(body) } : {}),
-  });
-  if (!response.ok) throw new Error(await response.text());
-  return endpoint.includes('/export/') ? response.text() : response.json();
+  try {
+    const response = await fetch(`${baseURL}${endpoint}`, {
+      method,
+      headers: { 'Content-Type': 'application/json', 'X-HARQ-Token': token },
+      ...(body !== null ? { body: JSON.stringify(body) } : {}),
+    });
+    // Validation is an ordinary application response, not a rejected Electron IPC invocation.
+    if (!response.ok) return { __harq_error: await response.text() };
+    return endpoint.includes('/export/') ? response.text() : response.json();
+  } catch {
+    return { __harq_error: 'Нет соединения с Python-сервером. Перезапустите приложение.' };
+  }
 });
 
 ipcMain.handle('harq:save', async (event, format, content) => {

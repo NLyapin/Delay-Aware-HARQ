@@ -4,7 +4,7 @@ import pytest
 from pydantic import ValidationError
 
 from harq_lab.config import SimulationConfig
-from harq_lab.experiments import ExperimentRequest, interval, run_experiment
+from harq_lab.experiments import MAX_EXPERIMENT_RUNS, ExperimentRequest, interval, run_experiment
 from harq_lab.reporting import csv_export, markdown_report
 
 
@@ -50,3 +50,25 @@ def test_sweep_seeds_summary_and_exports():
 def test_bad_grid(changes):
     with pytest.raises(ValidationError):
         ExperimentRequest(**changes)
+
+
+def test_user_snr_series_of_720_runs_is_valid():
+    request = ExperimentRequest(axis="snr_db", values=[-6, -4, -2, 0, 2, 4, 6, 8], repetitions=18)
+    assert len(request.values) * len(request.algorithms) * request.repetitions == 720
+
+
+def test_computation_budget_boundary_remains_enforced():
+    args = {"axis": "snr_db", "values": [-6, -4, -2, 0, 2, 4, 6, 8]}
+    ExperimentRequest(**args, repetitions=25)  # Exactly 20 million potential transmissions.
+    with pytest.raises(ValidationError, match="20.80 млн"):
+        ExperimentRequest(**args, repetitions=26)
+
+
+def test_run_count_limit_is_independent_of_airtime_budget():
+    with pytest.raises(ValidationError, match=str(MAX_EXPERIMENT_RUNS)):
+        ExperimentRequest(
+            axis="snr_db",
+            values=list(range(-12, 13)),
+            repetitions=30,
+            config=SimulationConfig(simulation_time_ms=100),
+        )

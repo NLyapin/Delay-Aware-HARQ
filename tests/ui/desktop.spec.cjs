@@ -11,6 +11,53 @@ async function launchLab() {
   return { app, profile };
 }
 
+test('720-run series is accepted, cancellable, and errors do not expose IPC or request JSON', async () => {
+  const { app, profile } = await launchLab();
+  try {
+    const page = await app.firstWindow();
+    await expect(page.locator('#connection-text')).toHaveText('Python engine подключён');
+    await page.locator('#repetitions').fill('18');
+    await page.locator('[data-view=sweep]').click();
+    await page.locator('#sweep-axis').selectOption('snr_db');
+    await expect(page.locator('#sweep-estimate')).toContainText('720 прогонов');
+    await expect(page.locator('#sweep-estimate')).toContainText('14,4 / 20 млн');
+    await expect(page.locator('#run-sweep')).toBeEnabled();
+    await page.locator('#run-sweep').click();
+    await expect(page.locator('#job-status')).toBeVisible();
+    await page.locator('#cancel').click();
+    await expect(page.locator('#job-message')).toHaveText('Остановлено пользователем', { timeout: 15000 });
+    await page.locator('[data-view=overview]').click();
+    await page.locator('#repetitions').fill('26');
+    await page.locator('[data-view=sweep]').click();
+    await expect(page.locator('#sweep-estimate')).toContainText('Бюджет 20,8 млн превышает лимит 20 млн');
+    await expect(page.locator('#run-sweep')).toBeDisabled();
+    const serverError = await page.evaluate(async () => {
+      try {
+        await api('/api/jobs', 'POST', {
+          axis: 'snr_db',
+          values: [-6, -4, -2, 0, 2, 4, 6, 8],
+          repetitions: 26,
+        });
+      } catch (error) {
+        return readable(error);
+      }
+    });
+    expect(serverError).toContain('Бюджет эксперимента');
+    expect(serverError).not.toMatch(/remote method|harq:request|"input"|"detail"/);
+    const legacyError = await page.evaluate(() =>
+      readable(
+        new Error(
+          'Error invoking remote method: Error: {"detail":[{"loc":["body"],"msg":"Value error, Не более 400 прогонов"}]}'
+        )
+      )
+    );
+    expect(legacyError).toBe('Не более 400 прогонов');
+  } finally {
+    await app.close();
+    fs.rmSync(profile, { recursive: true, force: true });
+  }
+});
+
 test('Electron launches Python, computes results, saves history, and draws real traces', async () => {
   const { app, profile } = await launchLab();
   try {
