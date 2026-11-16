@@ -1,0 +1,6 @@
+{
+  "name": "GEO — сравнение пяти стратегий, 5 seed",
+  "config": { "rtt_ms": 500, "snr_db": 1, "harq_processes": 16, "simulation_time_ms": 30000, "seed": 42 },
+  "algorithms": ["stop_wait", "parallel", "chase", "ir", "adaptive"],
+  "repetitions": 5
+}

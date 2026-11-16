@@ -1,0 +1,6 @@
+{
+  "name": "Влияние RTT при ограничении 16 процессов",
+  "config": { "rtt_ms": 500, "snr_db": 1, "harq_processes": 16, "simulation_time_ms": 20000, "seed": 100, "trace_limit": 0 },
+  "algorithms": ["stop_wait", "parallel", "chase", "ir", "adaptive"],
+  "axis": "rtt_ms", "values": [5, 20, 50, 100, 200, 500, 600], "repetitions": 5
+}

@@ -1,0 +1,6 @@
+{
+  "name": "Верификация аналитического предела — идеальный приём",
+  "config": { "decoder": "perfect", "rtt_ms": 500, "simulation_time_ms": 20000, "seed": 42, "trace_limit": 0 },
+  "algorithms": ["parallel"],
+  "axis": "harq_processes", "values": [1, 8, 16, 32, 64, 128, 256, 512], "repetitions": 1
+}

@@ -1,0 +1,6 @@
+{
+  "name": "GEO — масштабирование числа процессов",
+  "config": { "rtt_ms": 500, "snr_db": 1, "simulation_time_ms": 15000, "seed": 300, "trace_limit": 0 },
+  "algorithms": ["parallel", "chase", "ir", "adaptive"],
+  "axis": "harq_processes", "values": [1, 8, 16, 32, 64, 128, 256, 512], "repetitions": 3
+}

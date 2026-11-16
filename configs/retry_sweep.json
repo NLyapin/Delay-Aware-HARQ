@@ -1,0 +1,6 @@
+{
+  "name": "Надёжность и задержка — лимит передач",
+  "config": { "rtt_ms": 500, "snr_db": -3, "simulation_time_ms": 30000, "seed": 400, "deadline_ms": 6000, "trace_limit": 0 },
+  "algorithms": ["parallel", "chase", "ir", "adaptive"],
+  "axis": "max_transmissions", "values": [1, 2, 3, 4, 5, 6, 7, 8], "repetitions": 5
+}

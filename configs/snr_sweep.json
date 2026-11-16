@@ -1,0 +1,6 @@
+{
+  "name": "CC / IR / Adaptive — зависимость от SNR",
+  "config": { "rtt_ms": 500, "harq_processes": 32, "simulation_time_ms": 30000, "seed": 200, "trace_limit": 0 },
+  "algorithms": ["parallel", "chase", "ir", "adaptive"],
+  "axis": "snr_db", "values": [-6, -4, -2, 0, 2, 4, 6, 8], "repetitions": 5
+}
