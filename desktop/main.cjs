@@ -8,6 +8,7 @@ const path = require('node:path');
 let backend, window, baseURL, stopping = false;
 const token = randomBytes(32).toString('hex');
 const root = path.resolve(__dirname, '..');
+if (process.env.HARQ_USER_DATA) app.setPath('userData', process.env.HARQ_USER_DATA);
 const delay = ms => new Promise(resolve => setTimeout(resolve, ms));
 
 async function freePort() {
@@ -84,8 +85,8 @@ ipcMain.handle('harq:save', async (event, format, content) => {
 app.whenReady().then(async () => {
   try {
     await startBackend();
-    window = new BrowserWindow({ width: 1500, height: 980, minWidth: 1100, minHeight: 740,
-      title: 'HARQ Lab · Research workspace', backgroundColor: '#090e18',
+    window = new BrowserWindow({ width: 1500, height: 980, minWidth: 760, minHeight: 600,
+      title: 'HARQ Lab · Research workspace', backgroundColor: '#000000',
       webPreferences: { preload: path.join(__dirname, 'preload.cjs'), contextIsolation: true,
         nodeIntegration: false, sandbox: true, webSecurity: true } });
     window.webContents.setWindowOpenHandler(() => ({ action: 'deny' }));
