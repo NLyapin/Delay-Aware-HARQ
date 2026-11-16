@@ -78,7 +78,8 @@ async function startBackend() {
 
 function validPath(endpoint, method) {
   if (method === 'GET' && /^\/api\/hardware\/(capabilities|jobs\/[a-f0-9]{32})$/.test(endpoint)) return true;
-  if (method === 'POST' && /^\/api\/hardware\/(probe|jobs(?:\/[a-f0-9]{32}\/cancel)?|remote)$/.test(endpoint)) return true;
+  if (method === 'POST' && /^\/api\/hardware\/(probe|jobs(?:\/[a-f0-9]{32}\/cancel)?|remote)$/.test(endpoint))
+    return true;
   if (method === 'GET')
     return /^\/api\/(health|bootstrap|jobs(?:\/[a-f0-9]{32}(?:\/export\/(json|csv|md))?)?)$/.test(endpoint);
   return method === 'POST' && /^\/api\/jobs(?:\/[a-f0-9]{32}\/cancel)?$/.test(endpoint);

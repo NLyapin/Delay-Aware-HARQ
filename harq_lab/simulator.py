@@ -128,23 +128,32 @@ class Simulator:
             duration_ms=duration,
             mode=p.decision.mode,
             snr_db=10 * math.log10(max(1e-15, gamma)),
+            round=epoch,
         )
         final_in_burst = p.burst_left == 0
-        self.event(self.now + duration, self.tx_end, p)
+        attempt = p.attempts
+        self.event(self.now + duration, self.tx_end, p, attempt)
         self.event(
-            self.now + duration + self.c.rtt_ms / 2, self.receive, p, epoch, gamma, symbols, final_in_burst
+            self.now + duration + self.c.rtt_ms / 2,
+            self.receive,
+            p,
+            epoch,
+            gamma,
+            symbols,
+            final_in_burst,
+            attempt,
         )
         if final_in_burst:
             self.event(self.now + duration + self.c.rtt_ms + self.c.timeout_margin_ms, self.timeout, p, epoch)
 
-    def tx_end(self, p: Packet):
+    def tx_end(self, p: Packet, attempt: int):
         self.radio_busy = False
-        self.log("TX_END", p)
+        self.log("TX_END", p, attempt=attempt)
         if p.id in self.active and p.burst_left:
             self.ready.appendleft(p)
         self.dispatch()
 
-    def receive(self, p: Packet, epoch: int, gamma: float, symbols: float, final: bool):
+    def receive(self, p: Packet, epoch: int, gamma: float, symbols: float, final: bool, attempt: int):
         if p.id not in self.active:
             return
         if not p.delivered:
@@ -160,10 +169,12 @@ class Simulator:
                 self.latencies.append(self.now - p.birth)
                 # Attempts already launched by this instant can include proactive copies.
                 self.delivered_attempts.append(p.attempts)
-            self.log("RX_NACK" if failed else "RX_ACK", p, failure_probability=fail_p)
+            self.log(
+                "RX_NACK" if failed else "RX_ACK", p, failure_probability=fail_p, attempt=attempt, round=epoch
+            )
         else:
             self.count["duplicates"] += 1
-            self.log("RX_DUPLICATE", p)
+            self.log("RX_DUPLICATE", p, attempt=attempt, round=epoch)
         if final:
             received = self.channel.feedback_rng.random() >= self.c.feedback_loss
             self.event(self.now + self.c.rtt_ms / 2, self.feedback, p, epoch, p.delivered, gamma, received)

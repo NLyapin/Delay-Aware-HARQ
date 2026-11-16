@@ -1,0 +1,5 @@
+{
+  "backend": "software_iq", "action": "link_test", "algorithm": "chase",
+  "snr_db": 6, "packets": 10, "processes": 4, "payload_bytes": 32,
+  "duration_s": 15, "max_transmissions": 4, "ack_timeout_ms": 700
+}

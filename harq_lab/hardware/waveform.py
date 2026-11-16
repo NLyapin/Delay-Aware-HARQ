@@ -92,18 +92,18 @@ class FrameSynchronizer:
         frames = []
         minimum = (len(PREAMBLE) + HEADER_SYMBOLS) * self.sps
         while len(self.pending) >= minimum:
-            # Three acquisition bins cover +/- approximately fs/(64*sps) radians residual.
+            # Dense CFO acquisition bins avoid mistaking a preamble sidelobe for a header.
             best = None
             t = np.arange(len(self.pending)) / self.sample_rate
-            bin_hz = self.sample_rate / (64 * self.sps)
-            for hz in (-2 * bin_hz, 0.0, 2 * bin_hz):
+            bin_hz = self.sample_rate / (128 * self.sps)
+            power = np.convolve(abs(self.pending) ** 2, np.ones(len(self.template)), mode="valid")
+            for hz in (i * bin_hz for i in range(-6, 7)):
                 corrected = self.pending * np.exp(-2j * np.pi * hz * t)
                 corr = correlate(corrected, self.template, mode="valid", method="fft")
-                power = np.convolve(abs(corrected) ** 2, np.ones(len(self.template)), mode="valid")
                 norm = abs(corr) / np.sqrt(np.maximum(power * len(self.template), 1e-20))
                 # Lock to the full preamble maximum, not an autocorrelation sidelobe.
                 index = int(np.argmax(norm))
-                if norm[index] >= .20 and (best is None or norm[index] > best[1]):
+                if norm[index] >= 0.20 and (best is None or norm[index] > best[1]):
                     best = (index, float(norm[index]), corrected)
             if best is None:
                 self.pending = self.pending[-minimum:]
@@ -119,6 +119,18 @@ class FrameSynchronizer:
             phase = np.angle(np.vdot(self.template, segment[: len(self.template)]))
             segment = segment * np.exp(-1j * phase)
             symbols = segment[: len(segment) // self.sps * self.sps].reshape(-1, self.sps).mean(axis=1)
+            # A finite preamble cannot estimate CFO accurately enough for a whole payload.
+            # Continue tracking residual carrier with a training-aided BPSK Costas loop.
+            tracked = np.empty_like(symbols)
+            carrier = frequency = 0.0
+            for i, symbol in enumerate(symbols):
+                corrected_symbol = symbol * np.exp(-1j * carrier)
+                decision = PREAMBLE[i] if i < len(PREAMBLE) else (1 if corrected_symbol.real >= 0 else -1)
+                error = float(np.angle(corrected_symbol * decision))
+                frequency += 0.001 * error
+                carrier += frequency + 0.08 * error
+                tracked[i] = corrected_symbol
+            symbols = tracked
             training = symbols[: len(PREAMBLE)]
             amplitude = max(float(np.mean(training.real * PREAMBLE)), 1e-8)
             variance = max(float(np.mean(abs(training - amplitude * PREAMBLE) ** 2)), amplitude**2 * 1e-5)

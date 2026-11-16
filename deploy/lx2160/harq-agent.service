@@ -1,0 +1,20 @@
+[Unit]
+Description=HARQ physical agent on LX2160A
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=harq
+Group=harq
+WorkingDirectory=/opt/harq-lab
+EnvironmentFile=/etc/harq-agent.env
+ExecStart=/opt/harq-lab/.venv/bin/python -m harq_lab.cli device-agent --port 8766
+Restart=on-failure
+RestartSec=3
+TimeoutStopSec=15
+NoNewPrivileges=true
+PrivateTmp=true
+
+[Install]
+WantedBy=multi-user.target

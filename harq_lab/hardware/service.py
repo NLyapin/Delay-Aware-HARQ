@@ -45,6 +45,8 @@ class HardwareService:
         with self.lock:
             self.jobs[id]["status"] = "running"
         try:
+            if flag.is_set():
+                raise SimulationCancelled()
             result = run_hardware(c, flag.is_set)
             with self.lock:
                 self.jobs[id].update(status="cancelled" if flag.is_set() else "completed", result=result)

@@ -1,0 +1,6 @@
+{
+  "backend": "pluto_pair", "action": "link_test", "uri": "ip:192.168.2.1",
+  "peer_uri": "ip:192.168.3.1", "sample_rate": 1000000, "center_hz": 2400000000,
+  "bandwidth_hz": 1000000, "samples_per_symbol": 8, "rx_gain_db": 20, "tx_gain_db": -50,
+  "packets": 10, "processes": 4, "payload_bytes": 32, "algorithm": "chase", "allow_tx": true
+}

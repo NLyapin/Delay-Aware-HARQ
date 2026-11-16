@@ -45,6 +45,11 @@ const state = {
   pending: false,
 };
 const titles = {
+  hardware: [
+    'Аппаратный стенд',
+    'Физический уровень и аппаратные стенды',
+    'Два PlutoSDR или отдельная плата LX2160A; результаты отделены от имитационных.',
+  ],
   overview: [
     'Обзор эксперимента',
     'Сравнение алгоритмов HARQ',
@@ -411,6 +416,14 @@ function renderTrace() {
     (r) => r.algorithm === $('#trace-algorithm').value && r.repetition === 0
   );
   if (!run) return;
+  const selectedPacket = $('#trace-packet').value;
+  const packets = [...new Set(run.trace.filter((e) => e.event === 'TX_START').map((e) => e.packet))];
+  $('#trace-packet').innerHTML = packets.map((p) => `<option value="${p}">Пакет ${p}</option>`).join('');
+  if (selectedPacket !== '' && packets.includes(Number(selectedPacket)))
+    $('#trace-packet').value = selectedPacket;
+  $('#packet-flow').innerHTML = packets.length
+    ? window.HarqTrace.packetFlow(run, Number($('#trace-packet').value))
+    : '<p class="muted">Трасса не сохранена: задайте лимит событий больше нуля и выполните одиночное сравнение.</p>';
   const offset = Math.max(0, Number($('#trace-offset').value) || 0),
     span = Math.max(10, Number($('#trace-window').value) || 1600);
   const trace = run.trace.filter((e) => e.time_ms >= offset && e.time_ms <= offset + span);
@@ -448,7 +461,7 @@ function renderTrace() {
     .slice(0, 400)
     .map(
       (e) =>
-        `<tr><td>${fmt(e.time_ms, 3)}</td><td>${escapeHTML(e.event)}</td><td>${e.process ?? '—'}</td><td>${e.packet ?? '—'}</td><td>${e.attempt ?? '—'}</td><td>${escapeHTML(e.mode ?? '—')}</td></tr>`
+        `<tr><td>${fmt(e.time_ms, 3)}</td><td>${escapeHTML(window.HarqTrace.labels[e.event] || e.event)} <small>${escapeHTML(e.event)}</small></td><td>${e.process ?? '—'}</td><td>${e.packet ?? '—'}</td><td>${e.attempt ?? '—'}</td><td>${escapeHTML(e.mode ?? '—')}</td></tr>`
     )
     .join('');
 }
@@ -534,6 +547,7 @@ async function exportResult(format) {
 }
 async function init() {
   updatePalette();
+  window.HarqHardware.init({ api, readable, toast, save, fmt });
   configureAnalytics();
   $('#config-form').addEventListener('input', updateExperimentEstimates);
   $('#config-form').addEventListener('change', updateExperimentEstimates);
@@ -589,6 +603,20 @@ async function init() {
   });
   $('#refresh-history').addEventListener('click', refreshHistory);
   $('#trace-update').addEventListener('click', renderTrace);
+  $('#trace-packet').addEventListener('change', renderTrace);
+  $('#trace-focus').addEventListener('click', () => {
+    const run = state.traceResult?.runs.find(
+      (r) => r.algorithm === $('#trace-algorithm').value && r.repetition === 0
+    );
+    const events = run?.trace.filter((e) => e.packet === Number($('#trace-packet').value)) || [];
+    if (!events.length) return;
+    $('#trace-offset').value = Math.max(0, Math.floor(events[0].time_ms - 5));
+    $('#trace-window').value = Math.max(
+      10,
+      Math.min(10000, Math.ceil(events[events.length - 1].time_ms - events[0].time_ms + 20))
+    );
+    renderTrace();
+  });
   $('#trace-algorithm').addEventListener('change', renderTrace);
   $$('[data-export]').forEach((el) => el.addEventListener('click', () => exportResult(el.dataset.export)));
   $('#export-svg').addEventListener('click', async () => {

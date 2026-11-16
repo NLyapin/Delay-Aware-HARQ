@@ -5,9 +5,13 @@ from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 class HardwareConfig(BaseModel):
     model_config = ConfigDict(extra="forbid", frozen=True, allow_inf_nan=False)
-    backend: Literal["software_iq", "pluto"] = "software_iq"
+    backend: Literal["software_iq", "pluto", "pluto_pair", "board_udp"] = "software_iq"
     action: Literal["link_test", "receive", "transmit", "capture"] = "link_test"
     uri: str = Field("ip:192.168.2.1", min_length=3, max_length=200)
+    peer_uri: str = Field("ip:192.168.3.1", min_length=3, max_length=200)
+    board_host: str = "127.0.0.1"
+    board_port: int = Field(9120, ge=1024, le=65535)
+    local_port: int = Field(9121, ge=1024, le=65535)
     sample_rate: int = Field(1_000_000, ge=520_834, le=10_000_000)
     center_hz: int = Field(2_400_000_000, ge=325_000_000, le=3_800_000_000)
     bandwidth_hz: int = Field(1_000_000, ge=200_000, le=10_000_000)
@@ -29,19 +33,28 @@ class HardwareConfig(BaseModel):
 
     @model_validator(mode="after")
     def validate_backend(self):
-        if self.backend == "pluto" and self.action == "link_test":
+        if self.backend in ("pluto", "board_udp") and self.action == "link_test":
             raise ValueError(
                 "Для Pluto выберите приёмник, передатчик или захват IQ; link_test — только software_iq"
             )
         if self.backend == "software_iq" and self.action != "link_test":
             raise ValueError("software_iq поддерживает только физический тест без оборудования")
-        if self.backend == "pluto" and self.action in ("receive", "transmit") and not self.allow_tx:
+        if self.backend != "software_iq" and self.action != "capture" and not self.allow_tx:
             raise ValueError("Разрешите TX: приёмник HARQ тоже передаёт ACK/NACK по радио")
         if self.backend == "pluto" and not self.uri.startswith(("ip:", "usb:", "local:")):
             raise ValueError("IIO URI должен начинаться с ip:, usb: или local:")
+        if self.backend == "pluto_pair":
+            if self.action != "link_test" or self.uri == self.peer_uri:
+                raise ValueError("Стенд из двух Pluto: выберите link_test и два разных URI")
+            if any(not uri.startswith(("ip:", "usb:", "local:")) for uri in (self.uri, self.peer_uri)):
+                raise ValueError("Оба IIO URI должны начинаться с ip:, usb: или local:")
+        if self.backend == "board_udp":
+            from ipaddress import IPv4Address
+
+            IPv4Address(self.board_host)
         if self.rx_buffer_size < self.samples_per_symbol * 1100:
             raise ValueError("Буфер RX слишком мал для заголовка и синхронизации")
-        if self.bandwidth_hz > self.sample_rate:
+        if self.backend in ("pluto", "pluto_pair") and self.bandwidth_hz > self.sample_rate:
             raise ValueError("Полоса RX/TX должна быть не больше частоты дискретизации")
         return self
 
@@ -59,7 +72,7 @@ def capabilities() -> dict:
         "pluto_driver_installed": importlib.util.find_spec("adi") is not None,
         "platform": platform.system(),
         "machine": platform.machine(),
-        "backends": ["software_iq", "pluto"],
+        "backends": ["software_iq", "pluto_pair", "pluto", "board_udp"],
         "algorithms": ["stop_wait", "parallel", "chase", "ir"],
         "feedback": "RF frames with protected header; not a simulated ACK in Pluto mode",
         "clock": "host monotonic; no ADC/DAC hardware timestamps in this adapter",

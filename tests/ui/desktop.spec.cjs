@@ -87,6 +87,11 @@ test('Electron launches Python, computes results, saves history, and draws real 
       .locator('#result-content')
       .screenshot({ path: 'results/design-results-dark.png', animations: 'disabled' });
     await page.locator('[data-view=timeline]').click();
+    await expect(page.locator('#packet-flow > svg')).toBeVisible();
+    await expect(page.locator('#trace-packet')).toHaveValue('0');
+    await expect(page.locator('#packet-flow')).toContainText('Передатчик');
+    await expect(page.locator('#packet-flow')).toContainText('Приёмник');
+    await page.locator('#trace-focus').click();
     await expect(page.locator('#timeline-chart svg')).toBeVisible();
     await expect(page.locator('#trace-table tr').first()).toBeVisible();
     await page.screenshot({ path: 'results/desktop-timeline.png', fullPage: true });
@@ -117,6 +122,34 @@ test('Electron launches Python, computes results, saves history, and draws real 
       return { isolation: p.contextIsolation, node: p.nodeIntegration, sandbox: p.sandbox };
     });
     expect(settings).toEqual({ isolation: true, node: false, sandbox: true });
+  } finally {
+    await app.close();
+    fs.rmSync(profile, { recursive: true, force: true });
+  }
+});
+
+test('hardware profiles are separate and a real IQ reference job runs without RF', async () => {
+  const { app, profile } = await launchLab();
+  try {
+    const page = await app.firstWindow();
+    await expect(page.locator('#connection-text')).toHaveText('Python engine подключён');
+    await page.locator('[data-view=hardware]').click();
+    await expect(page.locator('#view-hardware')).toBeVisible();
+    await page.locator('#hw-profile').selectOption('pluto_pair');
+    await expect(page.locator('#hw-profile-note')).toContainText('Два отдельных PlutoSDR');
+    await page.locator('#hw-run').click();
+    await expect(page.locator('#hw-status')).toContainText('Разрешите TX');
+    await page.locator('#hw-profile').selectOption('lx2160');
+    await expect(page.locator('#hw-agent')).toBeEnabled();
+    await expect(page.locator('#hw-profile-note')).toContainText('RF/DMA');
+    await page.locator('#hw-profile').selectOption('software_iq');
+    await page.locator('#hw-packets').fill('2');
+    await page.locator('#hw-snr').fill('20');
+    await page.locator('#hw-run').click();
+    await expect(page.locator('#hw-status')).toContainText('завершён', { timeout: 15000 });
+    await expect(page.locator('#hw-result')).toContainText('software_iq_physical_reference');
+    await expect(page.locator('#hw-result')).toContainText('Подтверждено ACK');
+    await page.screenshot({ path: 'results/hardware-workspace.png', fullPage: true });
   } finally {
     await app.close();
     fs.rmSync(profile, { recursive: true, force: true });

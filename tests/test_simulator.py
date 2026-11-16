@@ -54,6 +54,15 @@ def test_feedback_is_causal():
     assert not any(e["event"] in ("ACK", "NACK") for e in r["trace"])
 
 
+def test_proactive_trace_preserves_the_original_transmission_attempt():
+    r = simulate(cfg(), "adaptive")
+    starts = [e for e in r["trace"] if e["event"] == "TX_START" and e["packet"] == 0]
+    received = [e for e in r["trace"] if e["event"].startswith("RX_") and e["packet"] == 0]
+    assert len(starts) > 1
+    assert received[0]["attempt"] == 1
+    assert [e["attempt"] for e in received] == [e["attempt"] for e in starts[: len(received)]]
+
+
 def test_loss_of_all_ack_does_not_duplicate_deliveries():
     r = simulate(
         cfg(
@@ -118,7 +127,9 @@ def test_ir_airtime_is_accounted_and_radio_does_not_overlap():
     r = simulate(c, "ir")
     tx = [e for e in r["trace"] if e["event"] == "TX_START"]
     assert any(e["duration_ms"] == 0.25 for e in tx)
-    assert all(b["time_ms"] >= a["time_ms"] + a["duration_ms"] - 1e-6 for a, b in zip(tx, tx[1:], strict=False))
+    assert all(
+        b["time_ms"] >= a["time_ms"] + a["duration_ms"] - 1e-6 for a, b in zip(tx, tx[1:], strict=False)
+    )
 
 
 def test_cc_and_ir_accumulation_have_correct_limits():

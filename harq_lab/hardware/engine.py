@@ -11,6 +11,7 @@ import numpy as np
 from harq_lab.phy import crc_valid, viterbi
 from harq_lab.simulator import SimulationCancelled
 
+from .board import BoardRadio
 from .config import HardwareConfig
 from .radio import PlutoRadio, software_pair
 from .waveform import RFFrame, make_waveform, redundancy_mask
@@ -198,7 +199,20 @@ def transmit(c: HardwareConfig, radio, cancelled=lambda: False):
     elapsed = time.monotonic() - start
     count["censored"] = len(active)
     return {
-        "metrics": dict(count),
+        "metrics": {
+            key: count[key]
+            for key in (
+                "started",
+                "transmissions",
+                "acknowledged",
+                "unacknowledged",
+                "censored",
+                "nacks",
+                "timeouts",
+                "stale_frames",
+                "tx_samples",
+            )
+        },
         "trace": trace,
         "elapsed_s": elapsed,
         "acked_goodput_kbps": count["acknowledged"] * c.payload_bytes * 8 / elapsed / 1000,
@@ -211,9 +225,21 @@ def transmit(c: HardwareConfig, radio, cancelled=lambda: False):
 
 
 def run_hardware(c: HardwareConfig, cancelled=lambda: False) -> dict:
+    if cancelled():
+        raise SimulationCancelled()
     started = time.monotonic()
-    if c.backend == "software_iq":
-        tx, rx = software_pair(c)
+    if c.backend in ("software_iq", "pluto_pair"):
+        if c.backend == "software_iq":
+            tx, rx = software_pair(c)
+        else:
+            tx = PlutoRadio(c.model_copy(update={"backend": "pluto", "action": "transmit"}))
+            try:
+                rx = PlutoRadio(
+                    c.model_copy(update={"backend": "pluto", "action": "receive", "uri": c.peer_uri})
+                )
+            except Exception:
+                tx.close()
+                raise
         receiver = PhysicalReceiver(c, rx)
         stop = threading.Event()
         errors = []
@@ -230,6 +256,10 @@ def run_hardware(c: HardwareConfig, cancelled=lambda: False) -> dict:
         worker.start()
         try:
             result = transmit(c, tx, lambda: cancelled() or bool(errors))
+        except SimulationCancelled:
+            if errors:
+                raise RuntimeError(errors[0]) from None
+            raise
         finally:
             stop.set()
             worker.join(timeout=2)
@@ -239,9 +269,11 @@ def run_hardware(c: HardwareConfig, cancelled=lambda: False) -> dict:
             raise RuntimeError(errors[0])
         result["receiver_metrics"] = dict(receiver.count)
         result["receiver_trace"] = receiver.trace
-        result["source"] = "software_iq_physical_reference"
+        result["source"] = (
+            "software_iq_physical_reference" if c.backend == "software_iq" else "pluto_pair_hardware"
+        )
     else:
-        radio = PlutoRadio(c)
+        radio = BoardRadio(c) if c.backend == "board_udp" else PlutoRadio(c)
         try:
             if c.action == "transmit":
                 result = transmit(c, radio, cancelled)
@@ -263,21 +295,26 @@ def run_hardware(c: HardwareConfig, cancelled=lambda: False) -> dict:
                         raise SimulationCancelled()
                     data = radio.receive_iq()
                 if data is None:
-                    raise RuntimeError("IIO не вернул IQ в течение 5 с")
+                    raise RuntimeError("Радиоадаптер не вернул IQ в течение 5 с")
+                full_scale = 1 if c.backend == "board_udp" else 2048
                 fft = np.fft.fftshift(np.fft.fft(data[:4096]))
                 result = {
                     "metrics": {
                         "iq_samples": len(data),
                         "mean_power_dbfs": float(
-                            10 * np.log10(max(np.mean(abs(data) ** 2) / (2048**2), 1e-15))
+                            10 * np.log10(max(np.mean(abs(data) ** 2) / (full_scale**2), 1e-15))
                         ),
                     },
-                    "spectrum_db": (20 * np.log10(np.maximum(abs(fft) / len(fft) / 2048, 1e-12))).tolist(),
+                    "spectrum_db": (
+                        20 * np.log10(np.maximum(abs(fft) / len(fft) / full_scale, 1e-12))
+                    ).tolist(),
                     "iq_preview": [[float(z.real), float(z.imag)] for z in data[:500]],
                     "elapsed_s": time.monotonic() - started,
                     "tx_started": False,
                 }
-            result["source"] = "pluto_iio_hardware"
+            result["source"] = (
+                "lx2160_board_iq_contract" if c.backend == "board_udp" else "pluto_iio_hardware"
+            )
             result["rx_overruns"] = radio.overruns
         finally:
             radio.close()

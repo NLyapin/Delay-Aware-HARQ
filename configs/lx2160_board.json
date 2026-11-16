@@ -1,0 +1,6 @@
+{
+  "backend": "board_udp", "action": "transmit", "board_host": "127.0.0.1",
+  "board_port": 9120, "local_port": 9121, "sample_rate": 1000000,
+  "samples_per_symbol": 8, "packets": 10, "processes": 4,
+  "payload_bytes": 32, "algorithm": "chase", "allow_tx": true
+}

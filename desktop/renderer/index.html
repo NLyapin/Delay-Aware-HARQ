@@ -11,6 +11,8 @@
     <script src="appearance.js"></script>
     <link rel="stylesheet" href="styles.css" />
     <script src="analytics.js" defer></script>
+    <script src="trace.js" defer></script>
+    <script src="hardware.js" defer></script>
     <script src="app.js" defer></script>
   </head>
   <body>
@@ -46,6 +48,9 @@
         </button>
         <button class="nav-item" data-view="method" data-short="Методика" aria-label="Модель и методика">
           <span data-icon="book"></span><span class="nav-copy">Модель и методика</span><small>05</small>
+        </button>
+        <button class="nav-item" data-view="hardware" data-short="Стенд" aria-label="Аппаратный стенд">
+          <span data-icon="antenna"></span><span class="nav-copy">Аппаратный стенд</span><small>06</small>
         </button>
       </nav>
       <div class="connection">
@@ -524,6 +529,29 @@
               Трасса первого seed одиночного сравнения. Полосы — TX, кружки — приём, ромбы — обратная связь.
               Ожидание показано пунктиром.
             </p>
+            <div class="trace-guide">
+              <strong>Как читать</strong>
+              <p>
+                1. Выберите алгоритм и пакет. На схеме стрелка вправо — данные, влево — ACK/NACK. Времена
+                указаны у концов стрелки.
+              </p>
+              <p>
+                2. На общей диаграмме ниже время идёт слева направо; строка P0, P1… — HARQ-процесс, а не
+                отдельный пакет. Один процесс обслуживает много пакетов последовательно.
+              </p>
+              <p>
+                3. TX длительностью 1 мс при RTT 500 мс занимает лишь 1/500 цикла и в этом масштабе выглядит
+                как тонкая полоска. Пустое место — ожидание, а не ошибка программы.
+              </p>
+            </div>
+            <div class="packet-controls">
+              <label>Пакет для разбора<select id="trace-packet"></select></label
+              ><button id="trace-focus" class="secondary-button">Показать его временной интервал</button>
+            </div>
+            <div id="packet-flow" class="packet-flow">
+              <p class="muted">Выполните одиночное сравнение, чтобы разобрать реальный пакет.</p>
+            </div>
+            <h3 class="trace-overview-title">Общая диаграмма процессов — время в масштабе</h3>
             <div class="timeline-controls">
               <label
                 >Окно, мс <input id="trace-window" type="number" min="10" max="10000" value="1600" /></label
@@ -556,6 +584,174 @@
                 <tbody id="trace-table"></tbody>
               </table>
             </div>
+          </section>
+        </section>
+        <section id="view-hardware" class="view hidden">
+          <div class="hardware-intro">
+            <strong>Режимы выполнения</strong>
+            <p>
+              Имитационная модель остаётся в разделе «Обзор». Здесь — физическое кодирование и I/Q, стенд из
+              двух PlutoSDR и отдельный профиль платы LX2160A.
+            </p>
+          </div>
+          <form id="hardware-form">
+            <div class="hardware-grid">
+              <section class="panel">
+                <div class="panel-heading"><h2>Профиль стенда</h2></div>
+                <div class="form-grid">
+                  <label
+                    >Исполнение<select id="hw-profile">
+                      <option value="software_iq">Физический I/Q-тест без оборудования</option>
+                      <option value="pluto_pair">Два PlutoSDR</option>
+                      <option value="lx2160">Плата LX2160A — удалённый агент</option>
+                    </select></label
+                  >
+                  <label
+                    >Алгоритм<select id="hw-algorithm">
+                      <option value="chase">Chase Combining</option>
+                      <option value="ir">Incremental Redundancy</option>
+                      <option value="parallel">Parallel Type-I</option>
+                      <option value="stop_wait">Stop-and-Wait</option>
+                    </select></label
+                  >
+                  <label>URI Pluto №1<input id="hw-uri" value="ip:192.168.2.1" /></label
+                  ><label>URI Pluto №2<input id="hw-peer-uri" value="ip:192.168.3.1" /></label>
+                  <label>Пакетов<input id="hw-packets" type="number" min="1" max="200" value="10" /></label
+                  ><label
+                    >Процессов<input id="hw-processes" type="number" min="1" max="32" value="4"
+                  /></label>
+                  <label
+                    >Лимит передач<input id="hw-attempts" type="number" min="1" max="8" value="4" /></label
+                  ><label
+                    >Таймаут ACK, мс<input id="hw-timeout" type="number" min="50" max="5000" value="700"
+                  /></label>
+                  <label
+                    >Полезная нагрузка, байт<input
+                      id="hw-payload"
+                      type="number"
+                      min="8"
+                      max="256"
+                      value="32" /></label
+                  ><label
+                    >Время работы, с<input id="hw-duration" type="number" min="1" max="120" value="15"
+                  /></label>
+                  <label
+                    >SNR теста I/Q, дБ<input id="hw-snr" type="number" min="-15" max="40" value="6" /></label
+                  ><label
+                    >Задержка ответа RX, мс<input id="hw-delay" type="number" min="0" max="2000" value="0"
+                  /></label>
+                </div>
+              </section>
+              <section class="panel">
+                <div class="panel-heading"><h2>Радиотракт и плата</h2></div>
+                <div class="form-grid">
+                  <label
+                    >Частота дискретизации, Гц<input
+                      id="hw-rate"
+                      type="number"
+                      min="520834"
+                      max="10000000"
+                      value="1000000" /></label
+                  ><label
+                    >RF-частота, Гц<input
+                      id="hw-center"
+                      type="number"
+                      min="325000000"
+                      max="3800000000"
+                      value="2400000000"
+                  /></label>
+                  <label
+                    >Полоса RF, Гц<input
+                      id="hw-bandwidth"
+                      type="number"
+                      min="200000"
+                      max="10000000"
+                      value="1000000" /></label
+                  ><label
+                    >Samples per symbol<input id="hw-sps" type="number" min="4" max="32" value="8"
+                  /></label>
+                  <label
+                    >Усиление RX, дБ<input
+                      id="hw-rx-gain"
+                      type="number"
+                      min="-3"
+                      max="70"
+                      value="20" /></label
+                  ><label
+                    >Ослабление TX, дБ<input
+                      id="hw-tx-gain"
+                      type="number"
+                      min="-89.75"
+                      max="0"
+                      step="any"
+                      value="-50"
+                  /></label>
+                  <label>SSH-туннель агента<input id="hw-agent" value="http://127.0.0.1:8766" /></label
+                  ><label
+                    >Токен агента<input
+                      id="hw-token"
+                      type="password"
+                      autocomplete="off"
+                      placeholder="HARQ_AGENT_TOKEN"
+                  /></label>
+                  <label
+                    >Режим платы<select id="hw-board-action">
+                      <option value="transmit">Передатчик HARQ — board UDP/IQ</option>
+                      <option value="receive">Приёмник HARQ — board UDP/IQ</option>
+                      <option value="capture">Только RX — захват IQ</option>
+                      <option value="reference">Проверка физического I/Q-тракта на CPU платы</option>
+                    </select></label
+                  ><label>IP RF/DMA-сервиса платы<input id="hw-board-host" value="127.0.0.1" /></label>
+                  <label
+                    >UDP-порт RF/DMA<input
+                      id="hw-board-port"
+                      type="number"
+                      min="1024"
+                      max="65535"
+                      value="9120" /></label
+                  ><label
+                    >Локальный UDP-порт RX<input
+                      id="hw-local-port"
+                      type="number"
+                      min="1024"
+                      max="65535"
+                      value="9121"
+                  /></label>
+                </div>
+                <label class="tx-consent"
+                  ><input id="hw-allow-tx" type="checkbox" /> Разрешаю передачу RF, включая ACK/NACK. Для
+                  реального стенда подключены согласованный радиотракт и необходимое ослабление.</label
+                >
+              </section>
+            </div>
+            <p id="hw-profile-note" class="hardware-note"></p>
+            <div class="hardware-actions">
+              <button id="hw-check" class="secondary-button" type="button">Проверить доступность</button
+              ><button id="hw-probe" class="secondary-button" type="button">
+                Прочитать IIO-контекст Pluto</button
+              ><button id="hw-run" class="primary-button" type="submit">Запустить физический тест</button
+              ><button id="hw-cancel" class="secondary-button hidden" type="button">Остановить</button
+              ><button id="hw-export" class="secondary-button" type="button">Сохранить результат JSON</button>
+            </div>
+          </form>
+          <div id="hw-status" class="hardware-status" role="status">
+            Устройства не опрашивались. RF-передача выключена.
+          </div>
+          <div id="hw-result"></div>
+          <section class="panel prose hardware-limits">
+            <h3>Границы реализации</h3>
+            <p>
+              BPSK, преамбула, синхронизация, мягкий Витерби, CRC, CC/IR и ACK/NACK-кадры реализованы.
+              Адаптивный алгоритм абстрактной модели не переносится на аппаратуру без калибровки. В режиме
+              Pluto обратная связь идёт по радио, не из генератора BLER. Точное аппаратное время ADC/DAC этим
+              адаптером не измеряется.
+            </p>
+            <p>
+              LX2160A — процессор, а не RF-трансивер. UDP/IQ — контракт проекта для её RF/DMA-сервиса; драйвер
+              конкретного радиомодуля и интеграция RTL в ADI HDL требуют выбранной аппаратной схемы. Готовой
+              прошивки FPGA нет; проверки на подключённых платах ещё не выполнены. Инструкции:
+              docs/HARDWARE.md.
+            </p>
           </section>
         </section>
         <section id="view-history" class="view hidden">
