@@ -14,6 +14,7 @@
     <link rel="stylesheet" href="styles.css" />
     <script src="analytics.js" defer></script>
     <script src="trace.js" defer></script>
+    <script src="hardware-plots.js" defer></script>
     <script src="hardware.js" defer></script>
     <script src="app.js" defer></script>
   </head>
@@ -594,7 +595,8 @@
             <strong>Режимы выполнения</strong>
             <p>
               Имитационная модель остаётся в разделе «Обзор». Здесь: физическое кодирование и I/Q, стенд из
-              двух PlutoSDR и отдельный профиль платы LX2160A.
+              двух PlutoSDR и отдельный профиль платы LX2160A. Для работы без радио выберите стенд CPU
+              реального времени.
             </p>
           </div>
           <form id="hardware-form">
@@ -604,7 +606,8 @@
                 <div class="form-grid">
                   <label
                     >Исполнение<select id="hw-profile">
-                      <option value="software_iq">Физический I/Q-тест без оборудования</option>
+                      <option value="realtime_iq">Стенд CPU реального времени</option>
+                      <option value="software_iq">Программный I/Q: эталонный тест</option>
                       <option value="pluto_pair">Два PlutoSDR</option>
                       <option value="lx2160">Плата LX2160A: удалённый агент</option>
                     </select></label
@@ -727,6 +730,88 @@
                 >
               </section>
             </div>
+            <section id="hw-realtime-fields" class="panel">
+              <div class="panel-heading">
+                <h2>I/Q-канал реального времени</h2>
+                <span class="muted">Только CPU, без RF</span>
+              </div>
+              <p class="chart-explanation">
+                Три отдельных процесса: передатчик, приёмник и программный канал. Отсчёты проходят через
+                сокеты ОС с ограниченной очередью. Скорость выдачи задаётся частотой дискретизации; обработка
+                и опоздания измеряются по часам компьютера.
+              </p>
+              <div class="form-grid">
+                <label
+                  >Распространение в одну сторону, мс<input
+                    id="hw-propagation"
+                    type="number"
+                    min="0"
+                    max="2000"
+                    step="any"
+                    value="250"
+                /></label>
+                <label
+                  >Добавочный джиттер, мс<input
+                    id="hw-jitter"
+                    type="number"
+                    min="0"
+                    max="100"
+                    step="any"
+                    value="2"
+                /></label>
+                <label
+                  >Сдвиг несущей, Гц<input
+                    id="hw-cfo"
+                    type="number"
+                    min="-5000"
+                    max="5000"
+                    step="any"
+                    value="350"
+                /></label>
+                <label
+                  >Смещение частоты отсчётов, ppm<input
+                    id="hw-clock"
+                    type="number"
+                    min="-200"
+                    max="200"
+                    step="any"
+                    value="10"
+                /></label>
+                <label
+                  >Задержка эха, отсчётов<input id="hw-echo-delay" type="number" min="0" max="64" value="4"
+                /></label>
+                <label
+                  >Уровень эха относительно прямого луча, дБ<input
+                    id="hw-echo-gain"
+                    type="number"
+                    min="-80"
+                    max="-3"
+                    step="any"
+                    value="-20"
+                /></label>
+                <label
+                  >Размер порции I/Q, отсчётов<input
+                    id="hw-chunk"
+                    type="number"
+                    min="512"
+                    max="8192"
+                    value="2048"
+                /></label>
+                <label
+                  >Очередь одного направления, отсчётов<input
+                    id="hw-queue"
+                    type="number"
+                    min="8192"
+                    max="2097152"
+                    value="262144"
+                /></label>
+              </div>
+              <p class="chart-explanation">
+                Для RTT около 500 мс начните с таймаута ACK 2000 мс: он также должен покрывать фактическое
+                время DSP и очереди. Сильные искажения могут сорвать синхронизацию: тогда подтверждение не
+                придёт и сработает настоящий таймер.
+              </p>
+            </section>
             <p id="hw-profile-note" class="hardware-note"></p>
             <div class="hardware-actions">
               <button id="hw-check" class="secondary-button" type="button">Проверить доступность</button

@@ -5,7 +5,7 @@ from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 class HardwareConfig(BaseModel):
     model_config = ConfigDict(extra="forbid", frozen=True, allow_inf_nan=False)
-    backend: Literal["software_iq", "pluto", "pluto_pair", "board_udp"] = "software_iq"
+    backend: Literal["software_iq", "realtime_iq", "pluto", "pluto_pair", "board_udp"] = "software_iq"
     action: Literal["link_test", "receive", "transmit", "capture"] = "link_test"
     uri: str = Field("ip:192.168.2.1", min_length=3, max_length=200)
     peer_uri: str = Field("ip:192.168.3.1", min_length=3, max_length=200)
@@ -30,6 +30,14 @@ class HardwareConfig(BaseModel):
     snr_db: float = Field(0, ge=-15, le=40)
     seed: int = Field(42, ge=0, le=2**32 - 1)
     allow_tx: bool = False
+    propagation_ms: float = Field(250, ge=0, le=2000)
+    jitter_ms: float = Field(0, ge=0, le=100)
+    carrier_offset_hz: float = Field(350, ge=-5000, le=5000)
+    clock_offset_ppm: float = Field(0, ge=-200, le=200)
+    echo_gain_db: float = Field(-20, ge=-80, le=-3)
+    echo_delay_samples: int = Field(0, ge=0, le=64)
+    iq_chunk_samples: int = Field(2048, ge=512, le=8192)
+    iq_queue_samples: int = Field(262144, ge=8192, le=2097152)
 
     @model_validator(mode="after")
     def validate_backend(self):
@@ -37,9 +45,13 @@ class HardwareConfig(BaseModel):
             raise ValueError(
                 "Для Pluto выберите приёмник, передатчик или захват IQ; link_test: только software_iq"
             )
-        if self.backend == "software_iq" and self.action != "link_test":
+        if self.backend in ("software_iq", "realtime_iq") and self.action != "link_test":
             raise ValueError("software_iq поддерживает только физический тест без оборудования")
-        if self.backend != "software_iq" and self.action != "capture" and not self.allow_tx:
+        if (
+            self.backend not in ("software_iq", "realtime_iq")
+            and self.action != "capture"
+            and not self.allow_tx
+        ):
             raise ValueError("Разрешите TX: приёмник HARQ тоже передаёт ACK/NACK по радио")
         if self.backend == "pluto" and not self.uri.startswith(("ip:", "usb:", "local:")):
             raise ValueError("IIO URI должен начинаться с ip:, usb: или local:")
@@ -72,7 +84,7 @@ def capabilities() -> dict:
         "pluto_driver_installed": importlib.util.find_spec("adi") is not None,
         "platform": platform.system(),
         "machine": platform.machine(),
-        "backends": ["software_iq", "pluto_pair", "pluto", "board_udp"],
+        "backends": ["software_iq", "realtime_iq", "pluto_pair", "pluto", "board_udp"],
         "algorithms": ["stop_wait", "parallel", "chase", "ir"],
         "feedback": "RF frames with protected header; not a simulated ACK in Pluto mode",
         "clock": "host monotonic; no ADC/DAC hardware timestamps in this adapter",

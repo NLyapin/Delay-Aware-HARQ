@@ -83,12 +83,18 @@ class FrameSynchronizer:
         self.pending = np.array([], dtype=np.complex64)
         self.template = np.repeat(PREAMBLE, sps).astype(np.complex64)
         self.rejected_headers = 0
+        self.dropped_samples = 0
+        self.peak_pending_samples = 0
+        self.last_diagnostics = {}
 
     def feed(self, iq: np.ndarray) -> list[RFFrame]:
         iq = np.asarray(iq, dtype=np.complex64)
         if iq.ndim != 1 or not np.isfinite(iq).all():
             raise ValueError("IQ must be a finite one-dimensional vector")
-        self.pending = np.concatenate([self.pending, iq])[-self.max_buffer :]
+        combined = np.concatenate([self.pending, iq])
+        self.dropped_samples += max(0, len(combined) - self.max_buffer)
+        self.pending = combined[-self.max_buffer :]
+        self.peak_pending_samples = max(self.peak_pending_samples, len(self.pending))
         frames = []
         minimum = (len(PREAMBLE) + HEADER_SYMBOLS) * self.sps
         while len(self.pending) >= minimum:
@@ -104,11 +110,11 @@ class FrameSynchronizer:
                 # Lock to the full preamble maximum, not an autocorrelation sidelobe.
                 index = int(np.argmax(norm))
                 if norm[index] >= 0.20 and (best is None or norm[index] > best[1]):
-                    best = (index, float(norm[index]), corrected)
+                    best = (index, float(norm[index]), corrected, hz)
             if best is None:
                 self.pending = self.pending[-minimum:]
                 break
-            index, _, corrected = best
+            index, _, corrected, coarse_hz = best
             if len(corrected) - index < minimum:
                 self.pending = self.pending[index:]
                 break
@@ -164,6 +170,11 @@ class FrameSynchronizer:
                 break
             body = llr[len(PREAMBLE) + HEADER_SYMBOLS : len(PREAMBLE) + HEADER_SYMBOLS + count].copy()
             snr = float(10 * np.log10(max(amplitude**2 / variance, 1e-12)))
+            self.last_diagnostics = {
+                "symbols": [[float(z.real), float(z.imag)] for z in symbols[:512]],
+                "snr_estimate_db": snr,
+                "carrier_acquisition_hz": float(coarse_hz + delta * self.sample_rate / (2 * np.pi)),
+            }
             frames.append(RFFrame(kind, mode, attempt, packet, process, size, session, body, snr))
             self.pending = self.pending[index + end :]
         return frames

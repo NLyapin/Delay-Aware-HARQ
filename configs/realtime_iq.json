@@ -1,0 +1,23 @@
+{
+  "backend": "realtime_iq",
+  "action": "link_test",
+  "algorithm": "chase",
+  "packets": 10,
+  "processes": 4,
+  "payload_bytes": 32,
+  "max_transmissions": 4,
+  "duration_s": 15,
+  "ack_timeout_ms": 2000,
+  "sample_rate": 1000000,
+  "samples_per_symbol": 8,
+  "snr_db": 6,
+  "propagation_ms": 250,
+  "jitter_ms": 2,
+  "carrier_offset_hz": 350,
+  "clock_offset_ppm": 10,
+  "echo_gain_db": -20,
+  "echo_delay_samples": 4,
+  "iq_chunk_samples": 2048,
+  "iq_queue_samples": 262144,
+  "seed": 42
+}

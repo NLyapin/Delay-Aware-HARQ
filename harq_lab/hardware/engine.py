@@ -71,6 +71,9 @@ class PhysicalReceiver:
             else:
                 self.buffers[key] = (identity, llr, time.monotonic())
                 self.count["decode_errors"] += 1
+        self.count["peak_soft_buffer_bytes"] = max(
+            self.count["peak_soft_buffer_bytes"], sum(v[1].nbytes for v in self.buffers.values())
+        )
         self.log("RX_ACK" if success else "RX_NACK", f, snr_db=f.snr_db)
         self.sequence += 1
         heapq.heappush(
@@ -103,7 +106,7 @@ class PhysicalReceiver:
             raise RuntimeError("Переполнение окна подавления дубликатов")
 
 
-def transmit(c: HardwareConfig, radio, cancelled=lambda: False):
+def transmit(c: HardwareConfig, radio, cancelled=lambda: False, clock_origin=None):
     start = time.monotonic()
     session = secrets.randbits(32)
     rng = np.random.default_rng(c.seed)
@@ -119,7 +122,7 @@ def transmit(c: HardwareConfig, radio, cancelled=lambda: False):
         if len(trace) < 4000:
             trace.append(
                 {
-                    "time_ms": (time.monotonic() - start) * 1000,
+                    "time_ms": (time.monotonic() - (start if clock_origin is None else clock_origin)) * 1000,
                     "event": event,
                     "packet": p["packet"],
                     "process": p["process"],
@@ -228,6 +231,10 @@ def run_hardware(c: HardwareConfig, cancelled=lambda: False) -> dict:
     if cancelled():
         raise SimulationCancelled()
     started = time.monotonic()
+    if c.backend == "realtime_iq":
+        from .realtime import run_realtime
+
+        return run_realtime(c, cancelled)
     if c.backend in ("software_iq", "pluto_pair"):
         if c.backend == "software_iq":
             tx, rx = software_pair(c)

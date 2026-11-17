@@ -2632,3 +2632,29 @@ html[data-active-view='hardware'] .instrument-strip {
     gap: 0.4rem;
   }
 }
+#hw-realtime-fields {
+  margin-top: 1.4rem;
+}
+.hardware-signal-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 1.4rem;
+  margin-top: 1.5rem;
+}
+.runtime-diagnostics {
+  margin-top: 2rem;
+}
+.runtime-diagnostics h2 {
+  margin-bottom: 1rem;
+}
+.runtime-table {
+  overflow-x: auto;
+}
+.runtime-diagnostics table {
+  width: 100%;
+}
+@media (max-width: 1000px) {
+  .hardware-signal-grid {
+    grid-template-columns: 1fr;
+  }
+}

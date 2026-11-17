@@ -9,7 +9,7 @@
     "format": "prettier --write 'desktop/**/*.{js,cjs,css,html}' 'tests/ui/*.cjs' 'scripts/*.cjs' '*.cjs' '*.json'",
     "start": "node scripts/start-desktop.cjs",
     "test:ui": "playwright test",
-    "check": "node --check desktop/main.cjs && node --check desktop/preload.cjs && node --check desktop/renderer/hardware.js && node --check desktop/renderer/trace.js && node --check desktop/renderer/interactions.js && node --check desktop/renderer/analytics.js && node --check desktop/renderer/appearance.js && node --check desktop/renderer/app.js",
+    "check": "node --check desktop/main.cjs && node --check desktop/preload.cjs && node --check desktop/renderer/hardware.js && node --check desktop/renderer/hardware-plots.js && node --check desktop/renderer/trace.js && node --check desktop/renderer/interactions.js && node --check desktop/renderer/analytics.js && node --check desktop/renderer/appearance.js && node --check desktop/renderer/app.js",
     "dist": "electron-builder --dir",
     "build:icons": "node scripts/build-icons.cjs"
   },

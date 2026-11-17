@@ -143,8 +143,12 @@ function updateStandLabel() {
   const profile = $('#hw-profile').value;
   $('#stand-label').textContent =
     state.view === 'hardware'
-      ? { software_iq: 'ФИЗИЧЕСКИЙ I/Q', pluto_pair: 'PLUTO SDR ×2', lx2160: 'LX-2160A' }[profile] ||
-        'АППАРАТНЫЙ СТЕНД'
+      ? {
+          realtime_iq: 'CPU · РЕАЛЬНОЕ ВРЕМЯ',
+          software_iq: 'ФИЗИЧЕСКИЙ I/Q',
+          pluto_pair: 'PLUTO SDR ×2',
+          lx2160: 'LX-2160A',
+        }[profile] || 'АППАРАТНЫЙ СТЕНД'
       : 'ИМИТАЦИЯ';
 }
 function populate(config) {
