@@ -1,5 +1,5 @@
 {
-  "name": "SNR — 18 повторений, 720 прогонов",
+  "name": "SNR: 18 повторений, 720 прогонов",
   "config": { "rtt_ms": 500, "snr_db": 1, "harq_processes": 16, "simulation_time_ms": 10000, "seed": 42 },
   "algorithms": ["stop_wait", "parallel", "chase", "ir", "adaptive"],
   "repetitions": 18,

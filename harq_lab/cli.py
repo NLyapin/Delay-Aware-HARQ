@@ -9,7 +9,7 @@ from .simulator import simulate
 
 
 def main():
-    parser = argparse.ArgumentParser(description="HARQ Lab — delay-aware retransmission research")
+    parser = argparse.ArgumentParser(description="HARQ Lab: delay-aware retransmission research")
     sub = parser.add_subparsers(dest="command", required=True)
     server = sub.add_parser("serve", help="Start loopback API and browser UI")
     server.add_argument("--port", type=int, default=8765)

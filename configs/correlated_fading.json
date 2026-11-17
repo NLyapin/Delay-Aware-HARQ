@@ -1,5 +1,5 @@
 {
-  "name": "GEO — коррелированный Rayleigh",
+  "name": "GEO: коррелированный Rayleigh",
   "config": { "rtt_ms": 500, "snr_db": 2, "harq_processes": 32, "channel": "correlated", "coherence_ms": 100, "simulation_time_ms": 30000, "seed": 500 },
   "algorithms": ["parallel", "chase", "ir", "adaptive"], "repetitions": 10
 }

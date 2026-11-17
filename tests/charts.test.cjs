@@ -11,7 +11,7 @@ charts.configure({
   short: { parallel: 'Parallel' },
   themeColor: (name) =>
     ({ '--fg': '#fff', '--bg': '#000', '--line': '#ffffff29', '--muted': '#929292' })[name],
-  fmt: (v, digits = 2) => (v == null ? '—' : Number(v).toFixed(digits)),
+  fmt: (v, digits = 2) => (v == null ? 'н/д' : Number(v).toFixed(digits)),
 });
 
 function metric(mean, low = null, high = null) {

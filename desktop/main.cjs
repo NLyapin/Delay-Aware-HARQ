@@ -28,17 +28,33 @@ async function freePort() {
 async function startBackend() {
   const port = await freePort();
   baseURL = `http://127.0.0.1:${port}`;
-  const python = process.env.HARQ_PYTHON || path.join(root, '.venv', 'bin', 'python');
+  const bundled = app.isPackaged && !process.env.HARQ_PYTHON;
+  const python =
+    process.env.HARQ_PYTHON ||
+    (bundled
+      ? path.join(
+          process.resourcesPath,
+          'backend',
+          process.platform === 'win32' ? 'harq-backend.exe' : 'harq-backend'
+        )
+      : path.join(
+          root,
+          '.venv',
+          process.platform === 'win32' ? 'Scripts' : 'bin',
+          process.platform === 'win32' ? 'python.exe' : 'python'
+        ));
   try {
     await fs.access(python);
   } catch {
     throw new Error(
-      `Не найден Python: ${python}\nВ папке проекта выполните: uv sync --python 3.12 --extra dev\nДля сборки приложения задайте HARQ_PYTHON.`
+      bundled
+        ? `В сборке отсутствует Python-движок: ${python}. Установите полную сборку приложения.`
+        : `Не найден Python: ${python}\nВ папке проекта выполните: uv sync --python 3.12 --extra dev`
     );
   }
   let logs = '',
     failed;
-  backend = spawn(python, ['-m', 'harq_lab.cli', 'serve', '--port', String(port)], {
+  backend = spawn(python, [...(bundled ? [] : ['-m', 'harq_lab.cli']), 'serve', '--port', String(port)], {
     cwd: root,
     stdio: ['ignore', 'pipe', 'pipe'],
     env: {
@@ -121,6 +137,7 @@ ipcMain.handle('harq:save', async (event, format, content) => {
 
 app.whenReady().then(async () => {
   try {
+    if (process.platform === 'darwin') app.dock?.setIcon(path.join(__dirname, 'assets', 'icon.png'));
     await startBackend();
     window = new BrowserWindow({
       width: 1500,
@@ -129,6 +146,7 @@ app.whenReady().then(async () => {
       minHeight: 600,
       title: 'HARQ Lab · Research workspace',
       backgroundColor: '#000000',
+      icon: path.join(__dirname, 'assets', 'icon.png'),
       webPreferences: {
         preload: path.join(__dirname, 'preload.cjs'),
         contextIsolation: true,

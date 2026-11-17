@@ -77,16 +77,15 @@ const titles = {
   ],
 };
 const fmt = (value, digits = 2) =>
-  value == null ? '—' : Number(value).toLocaleString('ru-RU', { maximumFractionDigits: digits });
-const pct = (value) => (value == null ? '—' : `${fmt(value * 100)}%`);
+  value == null ? 'н/д' : Number(value).toLocaleString('ru-RU', { maximumFractionDigits: digits });
+const pct = (value) => (value == null ? 'н/д' : `${fmt(value * 100)}%`);
 const escapeHTML = (str) =>
-  String(str ?? '').replace(
-    /[&<>"']/g,
-    (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]
-  );
+  String(str ?? '')
+    .replaceAll('\u2014', ':')
+    .replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]);
 function toast(message, error = false) {
   const el = $('#toast');
-  el.textContent = message;
+  el.textContent = String(message).replaceAll('\u2014', ':');
   el.classList.toggle('error', error);
   el.classList.remove('hidden');
   clearTimeout(toast.timer);
@@ -124,6 +123,9 @@ function readable(error) {
 }
 function setView(view, scroll = true) {
   state.view = view;
+  document.documentElement.dataset.activeView = view;
+  updateStandLabel();
+  window.HarqInteractions?.hide();
   $$('.view').forEach((el) => el.classList.toggle('hidden', el.id !== `view-${view}`));
   $$('.nav-item').forEach((el) => {
     el.classList.toggle('active', el.dataset.view === view);
@@ -136,6 +138,14 @@ function setView(view, scroll = true) {
   window.labUI?.enterView(view);
   if (view === 'history') refreshHistory();
   if (scroll) window.scrollTo({ top: 0 });
+}
+function updateStandLabel() {
+  const profile = $('#hw-profile').value;
+  $('#stand-label').textContent =
+    state.view === 'hardware'
+      ? { software_iq: 'ФИЗИЧЕСКИЙ I/Q', pluto_pair: 'PLUTO SDR ×2', lx2160: 'LX-2160A' }[profile] ||
+        'АППАРАТНЫЙ СТЕНД'
+      : 'ИМИТАЦИЯ';
 }
 function populate(config) {
   for (const input of $('#config-form').elements)
@@ -206,7 +216,7 @@ function experimentEstimate(sweep = false) {
   else if (!Number.isFinite(slots) || slots <= 0)
     error = 'Проверьте длительность прогона и передачи в конфигурации.';
   else if (runs > limits.max_runs)
-    error = `Запрошено ${runs} прогонов; лимит — ${limits.max_runs}. Уменьшите число значений, алгоритмов или повторений.`;
+    error = `Запрошено ${runs} прогонов; лимит: ${limits.max_runs}. Уменьшите число значений, алгоритмов или повторений.`;
   else if (potential > limits.max_potential_transmissions)
     error = `Бюджет ${fmt(potential / 1e6)} млн превышает лимит ${fmt(limits.max_potential_transmissions / 1e6)} млн потенциальных передач. Уменьшите длительность прогона или число повторений.`;
   return {
@@ -254,7 +264,7 @@ async function launch(sweep = false) {
       request.axis = $('#sweep-axis').value;
       const text = $('#sweep-values').value.trim();
       if (!text || text.split(',').some((v) => !v.trim() || !Number.isFinite(Number(v))))
-        throw new Error('Введите числовые значения через запятую. Десятичный разделитель — точка.');
+        throw new Error('Введите числовые значения через запятую. Десятичный разделитель: точка.');
       request.values = text.split(',').map((v) => Number(v.trim()));
     }
     const estimate = experimentEstimate(sweep);
@@ -358,7 +368,7 @@ function renderResults() {
     metricCard('ЛУЧШИЙ GOODPUT', fmt(best.metrics.goodput_kbps.mean), 'кбит/с', short[best.algorithm]) +
     metricCard(
       'ADAPTIVE К PARALLEL',
-      delta == null ? '—' : `${delta > 0 ? '+' : ''}${fmt(delta, 1)}`,
+      delta == null ? 'н/д' : `${delta > 0 ? '+' : ''}${fmt(delta, 1)}`,
       '%',
       'По средним goodput · не тест значимости'
     ) +
@@ -395,9 +405,9 @@ function renderSweep(result = state.result) {
   const spec =
     window.HarqAnalytics.specs.find((s) => s.key === $('#sweep-metric').value) ||
     window.HarqAnalytics.specs[0];
-  $('#sweep-chart-title').textContent = `${spec.title} — ${window.HarqAnalytics.axes[result.request.axis]}`;
+  $('#sweep-chart-title').textContent = `${spec.title}: ${window.HarqAnalytics.axes[result.request.axis]}`;
   $('#sweep-metric-help').textContent =
-    `${spec.direction}. ${spec.help} Усы — 95% ДИ по seed.${spec.factor === 100 ? ' Границы ДИ долей отображаются в пределах 0–100%, исходные значения доступны в подсказке и экспорте.' : ''}`;
+    `${spec.direction}. ${spec.help} Усы: 95% ДИ по seed.${spec.factor === 100 ? ' Границы ДИ долей отображаются в пределах 0–100%, исходные значения доступны в подсказке и экспорте.' : ''}`;
   $('#sweep-chart').classList.remove('empty-state');
   $('#sweep-chart').innerHTML = window.HarqAnalytics.sweep(result, spec);
   $('#sweep-legend').innerHTML = window.HarqAnalytics.legend(result.request.algorithms);
@@ -435,7 +445,19 @@ function renderTrace() {
     top = 35,
     height = Math.max(130, processes.length * 42 + 70),
     x = (t) => left + ((t - offset) / span) * (width - left - 30);
-  let svg = `<svg viewBox="0 0 ${width} ${height}" role="img" aria-label="Временная диаграмма HARQ"><title>Реальные события симуляции, первые 16 процессов в окне</title>`;
+  const meta = {
+    left,
+    right: width - 30,
+    top: 20,
+    bottom: height - 25,
+    xMin: offset,
+    xMax: offset + span,
+    xLabel: 'Время',
+    xUnit: 'мс',
+    yLabel: 'Процесс',
+    categories: processes.map((p, i) => ({ y: top + i * 42, label: `P${p}` })),
+  };
+  let svg = `<svg data-chart="${escapeHTML(JSON.stringify(meta))}" viewBox="0 0 ${width} ${height}" role="img" aria-label="Временная диаграмма HARQ"><title>Реальные события симуляции, первые 16 процессов в окне</title>`;
   for (let i = 0; i <= 5; i++) {
     const xx = x(offset + (i * span) / 5);
     svg += `<line class="chart-gridline" x1="${xx}" x2="${xx}" y1="20" y2="${height - 25}"/><text class="chart-label" x="${xx}" y="${height - 5}" text-anchor="middle">${fmt(offset + (i * span) / 5, 0)} ms</text>`;
@@ -446,11 +468,11 @@ function renderTrace() {
     for (const e of trace.filter((e) => e.process === p)) {
       const xx = x(e.time_ms);
       if (e.event === 'TX_START')
-        svg += `<rect x="${xx}" y="${yy - 8}" width="${Math.max(3, (e.duration_ms / span) * (width - left - 30))}" height="16" rx="2" fill="${e.attempt > 1 ? '#b6ff00' : themeColor('--fg')}"><title>TX P${p} packet ${e.packet} attempt ${e.attempt} @ ${e.time_ms}ms</title></rect>`;
+        svg += `<rect x="${xx}" y="${yy - 8}" width="${Math.max(3, (e.duration_ms / span) * (width - left - 30))}" height="16" rx="2" fill="${e.attempt > 1 ? '#b6ff00' : themeColor('--fg')}"><title>Передача: процесс P${p}; пакет ${e.packet}; попытка ${e.attempt}; начало ${fmt(e.time_ms)} мс; длительность ${fmt(e.duration_ms)} мс</title></rect>`;
       else if (e.event.startsWith('RX_'))
-        svg += `<circle cx="${xx}" cy="${yy}" r="4" fill="${e.event === 'RX_NACK' ? themeColor('--muted') : '#b6ff00'}" stroke="${themeColor('--fg')}" stroke-width=".5"><title>${e.event} ${e.time_ms}ms</title></circle>`;
+        svg += `<circle cx="${xx}" cy="${yy}" r="4" fill="${e.event === 'RX_NACK' ? themeColor('--muted') : '#b6ff00'}" stroke="${themeColor('--fg')}" stroke-width=".5"><title>${escapeHTML(window.HarqTrace.labels[e.event] || e.event)}: ${fmt(e.time_ms)} мс; пакет ${e.packet}; процесс P${p}; попытка ${e.attempt}</title></circle>`;
       else if (['ACK', 'NACK', 'TIMEOUT', 'DROP'].includes(e.event))
-        svg += `<path d="M${xx},${yy - 5} l5,5 l-5,5 l-5,-5 Z" fill="${e.event === 'ACK' ? '#b6ff00' : themeColor('--muted')}"><title>${e.event} ${e.time_ms}ms</title></path>`;
+        svg += `<path d="M${xx},${yy - 5} l5,5 l-5,5 l-5,-5 Z" fill="${e.event === 'ACK' ? '#b6ff00' : themeColor('--muted')}"><title>${escapeHTML(window.HarqTrace.labels[e.event] || e.event)}: ${fmt(e.time_ms)} мс; пакет ${e.packet}; процесс P${p}; попытка ${e.attempt}</title></path>`;
     }
   });
   $('#timeline-chart').classList.remove('empty-state');
@@ -461,7 +483,7 @@ function renderTrace() {
     .slice(0, 400)
     .map(
       (e) =>
-        `<tr><td>${fmt(e.time_ms, 3)}</td><td>${escapeHTML(window.HarqTrace.labels[e.event] || e.event)} <small>${escapeHTML(e.event)}</small></td><td>${e.process ?? '—'}</td><td>${e.packet ?? '—'}</td><td>${e.attempt ?? '—'}</td><td>${escapeHTML(e.mode ?? '—')}</td></tr>`
+        `<tr><td>${fmt(e.time_ms, 3)}</td><td>${escapeHTML(window.HarqTrace.labels[e.event] || e.event)} <small>${escapeHTML(e.event)}</small></td><td>${e.process ?? 'н/д'}</td><td>${e.packet ?? 'н/д'}</td><td>${e.attempt ?? 'н/д'}</td><td>${escapeHTML(e.mode ?? 'н/д')}</td></tr>`
     )
     .join('');
 }
@@ -547,6 +569,8 @@ async function exportResult(format) {
 }
 async function init() {
   updatePalette();
+  window.addEventListener('harq:profile', updateStandLabel);
+  updateStandLabel();
   window.HarqHardware.init({ api, readable, toast, save, fmt });
   configureAnalytics();
   $('#config-form').addEventListener('input', updateExperimentEstimates);

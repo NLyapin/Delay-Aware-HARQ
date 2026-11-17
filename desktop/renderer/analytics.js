@@ -34,7 +34,7 @@ window.HarqAnalytics = (() => {
     {
       key: 'bler',
       id: 'bler-chart',
-      title: 'Ошибки декодирования — BLER',
+      title: 'Ошибки декодирования: BLER',
       unit: '%',
       factor: 100,
       group: 'reliability',
@@ -57,7 +57,7 @@ window.HarqAnalytics = (() => {
       title: 'Пиковая память буферов',
       unit: 'КиБ',
       group: 'resources',
-      direction: 'Ниже — меньше ресурсов',
+      direction: 'Ниже: меньше ресурсов',
       help: 'Максимальный зарезервированный объём буферов активных процессов. IR резервирует память под дополнительную избыточность.',
     },
     {
@@ -66,7 +66,7 @@ window.HarqAnalytics = (() => {
       title: 'Передачи на начатый пакет',
       unit: 'передач/пакет',
       group: 'resources',
-      direction: 'Ниже — меньше повторов',
+      direction: 'Ниже: меньше повторов',
       help: 'Все начатые передачи / число начатых пакетов. Включает первую передачу, упреждающие копии и незавершённые пакеты.',
     },
     {
@@ -97,6 +97,7 @@ window.HarqAnalytics = (() => {
   function configure(context) {
     ctx = context;
   }
+  const attrs = (meta) => `data-chart="${esc(JSON.stringify(meta))}"`;
   function number(value, digits = 2) {
     return value != null && value !== 0 && Math.abs(value) < 0.001
       ? value.toExponential(2)
@@ -127,7 +128,19 @@ window.HarqAnalytics = (() => {
       rowH = 37,
       height = top + rows.length * rowH + 32;
     const x = (v) => left + (Math.min(upperBound, Math.max(0, v)) / max) * (width - left - right);
-    let out = `<svg viewBox="0 0 ${width} ${height}" role="img" aria-label="${spec.title}, ${spec.unit}"><title>${spec.title}: средние и 95% ДИ по seed</title>`;
+    const meta = {
+      left,
+      right: width - right,
+      top: 0,
+      bottom: height - 25,
+      xMin: 0,
+      xMax: max,
+      xLabel: spec.title,
+      xUnit: spec.unit,
+      yLabel: 'Алгоритм',
+      categories: rows.map((r, i) => ({ y: top + i * rowH + 11, label: ctx.short[r.algorithm] })),
+    };
+    let out = `<svg ${attrs(meta)} viewBox="0 0 ${width} ${height}" role="img" aria-label="${spec.title}, ${spec.unit}"><title>${spec.title}: средние и 95% ДИ по seed</title>`;
     for (let i = 0; i <= 4; i++) {
       const v = (max * i) / 4;
       out += `<line class="chart-gridline" x1="${x(v)}" x2="${x(v)}" y1="0" y2="${height - 25}"/><text class="chart-label" text-anchor="middle" x="${x(v)}" y="${height - 5}">${number(v, dataMax < 5 ? 2 : 1)}</text>`;
@@ -145,7 +158,7 @@ window.HarqAnalytics = (() => {
       if (value.ci_low != null) {
         const low = x(Math.max(0, value.ci_low * factor)),
           high = x(value.ci_high * factor);
-        out += `<path class="chart-ci" d="M${low},${y + 11}H${high}M${low},${y + 6}v10M${high},${y + 6}v10"/>`;
+        out += `<path class="chart-ci" tabindex="0" data-tip="${esc(`${ctx.short[row.algorithm]}: 95% ДИ [${ctx.fmt(value.ci_low * factor, 4)}; ${ctx.fmt(value.ci_high * factor, 4)}] ${spec.unit}; n=${value.n}`)}" d="M${low},${y + 11}H${high}M${low},${y + 6}v10M${high},${y + 6}v10"/>`;
       }
       out += `<text class="chart-value" x="${x((value.ci_high ?? value.mean) * factor) + 7}" y="${y + 16}">${number(mean, 2)}</text>`;
     });
@@ -169,7 +182,21 @@ window.HarqAnalytics = (() => {
       Math.min(upperBound, points.reduce((v, p) => Math.max(v, p.y, p.high ?? 0), 0.001) * 1.12);
     const x = (v) => left + ((v - loX) / spanX) * (width - left - right),
       y = (v) => height - bottom - (Math.min(upperBound, Math.max(0, v)) / hiY) * (height - top - bottom);
-    let out = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${width} ${height}" role="img" aria-label="${esc(options.title)}"><rect width="100%" height="100%" fill="${ctx.themeColor('--bg')}"/><text x="${left}" y="13" fill="${ctx.themeColor('--muted')}" font-size="10">${esc(options.unit)}</text>`;
+    const meta = {
+      left,
+      right: width - right,
+      top,
+      bottom: height - bottom,
+      xMin: loX,
+      xMax: loX + spanX,
+      yMin: 0,
+      yMax: hiY,
+      xLabel: options.xLabel,
+      xUnit: '',
+      yLabel: options.title,
+      yUnit: options.unit,
+    };
+    let out = `<svg ${attrs(meta)} xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${width} ${height}" role="img" aria-label="${esc(options.title)}"><rect width="100%" height="100%" fill="${ctx.themeColor('--bg')}"/><text x="${left}" y="13" fill="${ctx.themeColor('--muted')}" font-size="10">${esc(options.unit)}</text>`;
     for (let i = 0; i <= 4; i++) {
       const value = (hiY * i) / 4;
       out += `<line x1="${left}" x2="${width - right}" y1="${y(value)}" y2="${y(value)}" stroke="${ctx.themeColor('--line')}"/><text x="${left - 9}" y="${y(value) + 4}" text-anchor="end" fill="${ctx.themeColor('--muted')}" font-size="10">${ctx.fmt(value, hiY < 5 ? 2 : 1)}</text>`;
@@ -190,14 +217,14 @@ window.HarqAnalytics = (() => {
       }
       if (segment.length) segments.push(segment);
       for (const seg of segments)
-        out += `<polyline points="${seg.map((p) => `${x(p.x)},${y(p.y)}`).join(' ')}" fill="none" stroke="${ctx.colors[s.algorithm]}" stroke-width="2" stroke-dasharray="${dash[i % 5]}"/>`;
+        out += `<polyline data-series="${esc(ctx.short[s.algorithm])}" points="${seg.map((p) => `${x(p.x)},${y(p.y)}`).join(' ')}" fill="none" stroke="${ctx.colors[s.algorithm]}" stroke-width="2" stroke-dasharray="${dash[i % 5]}"/>`;
       const valid = s.points.filter((p) => p.y != null);
       valid.forEach((p, j) => {
         if (p.low != null) {
           const low = y(Math.max(0, p.low)),
             high = y(p.high),
             xx = x(p.x);
-          out += `<path d="M${xx},${low}V${high}M${xx - 3},${low}h6M${xx - 3},${high}h6" stroke="${ctx.colors[s.algorithm]}" stroke-width=".8"/>`;
+          out += `<path tabindex="0" data-tip="${esc(`${ctx.short[s.algorithm]}: X=${ctx.fmt(p.x)} ${options.xLabel}; 95% ДИ [${ctx.fmt(p.low, 4)}; ${ctx.fmt(p.high, 4)}] ${options.unit}`)}" d="M${xx},${low}V${high}M${xx - 3},${low}h6M${xx - 3},${high}h6" stroke="${ctx.colors[s.algorithm]}" stroke-width=".8"/>`;
         }
         if (options.dots || j % Math.max(1, Math.floor(valid.length / 10)) === 0)
           out += `<circle tabindex="0" cx="${x(p.x)}" cy="${y(p.y)}" r="${options.dots ? 3.5 : 2}" fill="${ctx.colors[s.algorithm]}" stroke="${ctx.themeColor('--fg')}" stroke-width=".5"><title>${ctx.short[s.algorithm]}: ${ctx.fmt(p.x)} ${options.xLabel}; ${ctx.fmt(p.y, 4)} ${options.unit}${p.low == null ? '' : `; 95% ДИ [${ctx.fmt(p.low, 4)}; ${ctx.fmt(p.high, 4)}]`}</title></circle>`;
@@ -230,7 +257,19 @@ window.HarqAnalytics = (() => {
     const keys = ['delivered', 'dropped', 'censored'],
       fills = ['#b6ff00', ctx.themeColor('--fg'), ctx.themeColor('--muted')];
     const max = Math.max(1, ...result.summary.map((r) => get(r, 'started').mean || 0));
-    let out = `<svg viewBox="0 0 ${width} ${height}" role="img" aria-label="Доставленные, потерянные и незавершённые пакеты">`;
+    const meta = {
+      left,
+      right: width - right,
+      top: 0,
+      bottom: height - 15,
+      xMin: 0,
+      xMax: max,
+      xLabel: 'Пакетов',
+      xUnit: 'пакетов',
+      yLabel: 'Алгоритм',
+      categories: result.summary.map((r, i) => ({ y: 12 + i * rowH + 11, label: ctx.short[r.algorithm] })),
+    };
+    let out = `<svg ${attrs(meta)} viewBox="0 0 ${width} ${height}" role="img" aria-label="Доставленные, потерянные и незавершённые пакеты">`;
     result.summary.forEach((row, i) => {
       const y = 12 + i * rowH;
       let x = left;
@@ -267,7 +306,7 @@ window.HarqAnalytics = (() => {
           spec.help +
             ' Среднее и 95% ДИ по seed.' +
             (spec.factor === 100
-              ? ' Для наглядности ДИ долей отображаются в пределах 0–100%; исходные границы — в подсказке и экспорте.'
+              ? ' Для наглядности ДИ долей отображаются в пределах 0–100%; исходные границы: в подсказке и экспорте.'
               : ''),
           spec.group,
           bar(result.summary, spec)
@@ -279,7 +318,7 @@ window.HarqAnalytics = (() => {
       'goodput-time-chart',
       'Полезная скорость во времени',
       'кбит/с',
-      'Накопленная полезная скорость от начала прогона. Линии — средние по seed, не мгновенная скорость. Первые доставки задержаны временем распространения.',
+      'Накопленная полезная скорость от начала прогона. Линии: средние по seed, не мгновенная скорость. Первые доставки задержаны временем распространения.',
       'dynamics',
       line(timeSeries(result, 'goodput_kbps'), {
         title: 'Полезная скорость во времени',
@@ -320,7 +359,7 @@ window.HarqAnalytics = (() => {
       'latency-cdf-chart',
       'Распределение задержки доставки',
       'CDF, %',
-      `Ось X — задержка; Y — доля доставленных пакетов с задержкой не больше X. Пересечение уровня 95% соответствует P95. Только первый seed (${seed}), ${truncated ? 'сохранённая выборка до 20 000 задержек' : 'все сохранённые доставки'}; потерянные пакеты исключены.`,
+      `Ось X: задержка; Y: доля доставленных пакетов с задержкой не больше X. Пересечение уровня 95% соответствует P95. Только первый seed (${seed}), ${truncated ? 'сохранённая выборка до 20 000 задержек' : 'все сохранённые доставки'}; потерянные пакеты исключены.`,
       'performance dynamics',
       line(cdf, {
         title: 'Эмпирическая CDF задержки',
@@ -386,7 +425,7 @@ window.HarqAnalytics = (() => {
     const rows = result.summary;
     const best = rows.reduce((a, b) => (get(a, 'goodput_kbps').mean > get(b, 'goodput_kbps').mean ? a : b));
     const messages = [
-      `Максимальная средняя полезная скорость: ${ctx.short[best.algorithm]} — ${ctx.fmt(get(best, 'goodput_kbps').mean)} кбит/с. Это максимум среди выбранных стратегий в данной конфигурации.`,
+      `Максимальная средняя полезная скорость: ${ctx.short[best.algorithm]}: ${ctx.fmt(get(best, 'goodput_kbps').mean)} кбит/с. Это максимум среди выбранных стратегий в данной конфигурации.`,
     ];
     const pair = result.paired?.find((p) => p.axis_value == null)?.goodput_delta_kbps;
     if (pair)

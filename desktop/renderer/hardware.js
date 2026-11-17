@@ -36,6 +36,7 @@ window.HarqHardware = (() => {
   }
   function profile() {
     const name = $('#hw-profile').value;
+    window.dispatchEvent(new CustomEvent('harq:profile', { detail: name }));
     $('#hw-profile-note').textContent = notes[name];
     $('#hw-probe').disabled = name !== 'pluto_pair' || Boolean(active);
     $('#hw-run').textContent =
@@ -171,7 +172,7 @@ window.HarqHardware = (() => {
           failed: 'ошибка',
           cancelled: 'остановлен',
         }[job.status] || job.status;
-      status(`Физический запуск: ${label}${job.error ? ' — ' + job.error : ''}`);
+      status(`Физический запуск: ${label}${job.error ? ': ' + job.error : ''}`);
       if (['completed', 'failed', 'cancelled'].includes(job.status)) {
         if (job.result) drawResult(job.result);
         if (job.error) client.toast(job.error, true);

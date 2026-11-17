@@ -136,13 +136,16 @@ test('hardware profiles are separate and a real IQ reference job runs without RF
     await page.locator('[data-view=hardware]').click();
     await expect(page.locator('#view-hardware')).toBeVisible();
     await page.locator('#hw-profile').selectOption('pluto_pair');
+    await expect(page.locator('#stand-label')).toHaveText('PLUTO SDR ×2');
     await expect(page.locator('#hw-profile-note')).toContainText('Два отдельных PlutoSDR');
     await page.locator('#hw-run').click();
     await expect(page.locator('#hw-status')).toContainText('Разрешите TX');
     await page.locator('#hw-profile').selectOption('lx2160');
+    await expect(page.locator('#stand-label')).toHaveText('LX-2160A');
     await expect(page.locator('#hw-agent')).toBeEnabled();
     await expect(page.locator('#hw-profile-note')).toContainText('RF/DMA');
     await page.locator('#hw-profile').selectOption('software_iq');
+    await expect(page.locator('#stand-label')).toHaveText('ФИЗИЧЕСКИЙ I/Q');
     await page.locator('#hw-packets').fill('2');
     await page.locator('#hw-snr').fill('20');
     await page.locator('#hw-run').click();

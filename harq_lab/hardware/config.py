@@ -35,7 +35,7 @@ class HardwareConfig(BaseModel):
     def validate_backend(self):
         if self.backend in ("pluto", "board_udp") and self.action == "link_test":
             raise ValueError(
-                "Для Pluto выберите приёмник, передатчик или захват IQ; link_test — только software_iq"
+                "Для Pluto выберите приёмник, передатчик или захват IQ; link_test: только software_iq"
             )
         if self.backend == "software_iq" and self.action != "link_test":
             raise ValueError("software_iq поддерживает только физический тест без оборудования")

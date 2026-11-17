@@ -1,5 +1,5 @@
 {
-  "name": "Ресурсный компромисс — память мягких буферов",
+  "name": "Ресурсный компромисс: память мягких буферов",
   "config": { "rtt_ms": 500, "harq_processes": 512, "snr_db": 0, "simulation_time_ms": 10000, "trace_limit": 0, "seed": 600 },
   "algorithms": ["parallel", "chase", "ir", "adaptive"],
   "axis": "memory_mb", "values": [0.01, 0.05, 0.1, 0.5, 1, 4], "repetitions": 3

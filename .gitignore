@@ -10,3 +10,5 @@ results/*
 .DS_Store
 test-results/
 
+# Private local build/release tools and staging files
+.local/
