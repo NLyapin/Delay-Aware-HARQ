@@ -78,8 +78,18 @@ test('plots, packet diagrams and timelines expose cursor coordinates and source 
     await page.screenshot({ path: 'results/interactive-timeline.png', animations: 'disabled' });
     await moveToPlot(page, '#packet-flow > svg', 0.5, 0.2);
     await expect(page.locator('#chart-tooltip')).toContainText('Схема этапов');
-    await page.locator('#packet-flow [data-tip]').first().locator('path').first().hover();
-    await expect(page.locator('#chart-tooltip')).toContainText('Пакет');
+    for (const scale of ['85', '100', '130']) {
+      await page.locator('#ui-scale').selectOption(scale);
+      const arrow = page.locator('#packet-flow [data-tip]').first().locator('path').first();
+      await arrow.scrollIntoViewIfNeeded();
+      await page.evaluate(
+        () => new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve)))
+      );
+      await arrow.hover();
+      await expect(page.locator('#chart-tooltip')).toContainText('Пакет');
+      await expect(page.locator('#chart-tooltip')).toContainText('Начало TX');
+    }
+    await page.locator('#ui-scale').selectOption('100');
     await page.locator('[data-view=sweep]').click();
     await page.locator('#sweep-values').fill('10, 500');
     await page.locator('#run-sweep').click();

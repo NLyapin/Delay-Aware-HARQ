@@ -2658,3 +2658,7 @@ html[data-active-view='hardware'] .instrument-strip {
     grid-template-columns: 1fr;
   }
 }
+/* Thin SVG arrows keep a usable hover target at every DPI and UI scale. */
+.packet-flow [data-tip] > path {
+  pointer-events: bounding-box;
+}

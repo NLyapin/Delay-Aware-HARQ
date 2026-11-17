@@ -1,0 +1,323 @@
+name: Release HARQ Lab
+run-name: HARQ ${{ inputs.tag }} / ${{ inputs.request_id }}
+
+on:
+  workflow_dispatch:
+    inputs:
+      source_commit:
+        description: Exact pushed source commit (40-character SHA)
+        required: true
+        type: string
+      tag:
+        description: Release tag matching package.json (for example v1.0.1)
+        required: true
+        type: string
+      request_id:
+        description: Unique ID supplied by the local release driver
+        required: true
+        type: string
+      publish:
+        description: Publish after every build succeeds (otherwise leave a draft)
+        type: boolean
+        default: true
+      build_only:
+        description: Build artifacts without creating a release
+        type: boolean
+        default: false
+
+permissions:
+  contents: read
+
+concurrency:
+  group: harq-release-${{ inputs.tag }}
+  cancel-in-progress: false
+
+defaults:
+  run:
+    shell: bash
+
+env:
+  SOURCE_COMMIT: ${{ inputs.source_commit }}
+  RELEASE_TAG: ${{ inputs.tag }}
+  PYTHONUTF8: '1'
+
+jobs:
+  verify:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.source_commit }}
+          persist-credentials: false
+      - uses: astral-sh/setup-uv@v6
+      - name: Validate immutable source, version and release tag
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+          BUILD_ONLY: ${{ inputs.build_only }}
+        run: |
+          uv run --python 3.12 --no-project python - <<'PY'
+          import json, os, re, subprocess, tomllib
+          from pathlib import Path
+          sha, tag = os.environ['SOURCE_COMMIT'], os.environ['RELEASE_TAG']
+          assert re.fullmatch(r'[0-9a-f]{40}', sha), 'Expected a full source commit SHA'
+          assert subprocess.check_output(['git','rev-parse','HEAD'], text=True).strip() == sha
+          version = json.loads(Path('package.json').read_text())['version']
+          assert re.fullmatch(r'\d+\.\d+\.\d+(?:[-+][0-9A-Za-z.-]+)?', version), 'Invalid version'
+          assert tag == 'v' + version, 'Tag must match package.json version'
+          assert tomllib.loads(Path('pyproject.toml').read_text())['project']['version'] == version, 'Python/Electron versions differ'
+          repo = os.environ['REPO']
+          response = subprocess.run(['gh','api',f'repos/{repo}/git/ref/tags/{tag}'], capture_output=True, text=True)
+          if response.returncode == 0 and os.environ['BUILD_ONLY'] != 'true':
+              obj = json.loads(response.stdout)['object']
+              for _ in range(8):
+                  if obj['type'] != 'tag': break
+                  obj = json.loads(subprocess.check_output(['gh','api',f'repos/{repo}/git/tags/{obj["sha"]}'], text=True))['object']
+              assert obj['type'] == 'commit' and obj['sha'] == sha, 'Existing tag points to another commit'
+          elif response.returncode and '404' not in response.stderr:
+              raise RuntimeError(response.stderr)
+          response = subprocess.run(['gh','api',f'repos/{repo}/releases/tags/{tag}'], capture_output=True, text=True)
+          if response.returncode == 0 and os.environ['BUILD_ONLY'] != 'true':
+              assert json.loads(response.stdout)['draft'], 'Release is already published: bump the version'
+          elif response.returncode and '404' not in response.stderr:
+              raise RuntimeError(response.stderr)
+          PY
+      - run: sudo apt-get update && sudo apt-get install -y iverilog
+      - run: uv sync --python 3.12 --extra dev --locked
+      - run: uv run --locked pytest -q
+      - run: uv run --locked ruff check harq_lab tests
+
+  build:
+    needs: verify
+    timeout-minutes: 45
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - id: win-x64
+            os: windows-2022
+            platform: win
+            arch: x64
+          - id: linux-x64
+            os: ubuntu-24.04
+            platform: linux
+            arch: x64
+          - id: mac-arm64
+            os: macos-15
+            platform: mac
+            arch: arm64
+          - id: mac-x64
+            os: macos-15-intel
+            platform: mac
+            arch: x64
+    runs-on: ${{ matrix.os }}
+    env:
+      TARGET_ID: ${{ matrix.id }}
+      TARGET_PLATFORM: ${{ matrix.platform }}
+      TARGET_ARCH: ${{ matrix.arch }}
+      CSC_IDENTITY_AUTO_DISCOVERY: 'false'
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.source_commit }}
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          architecture: ${{ matrix.arch }}
+          cache: npm
+      - uses: astral-sh/setup-uv@v6
+      - name: Clean previous output
+        run: |
+          uv run --python 3.12 --no-project python - <<'PY'
+          import shutil
+          from pathlib import Path
+          output = Path('desktop/dist')
+          assert not output.is_symlink(), 'Refusing a symlink build directory'
+          if output.exists(): shutil.rmtree(output)
+          PY
+      - run: uv sync --python 3.12 --extra dev --locked
+      - run: npm ci
+      - run: npm run check
+      - run: npm run test:charts
+      - name: Check desktop and pointer interactions
+        if: matrix.id == 'mac-arm64'
+        run: npm run test:ui
+      - name: Prepare native Python entry point
+        run: |
+          uv run --locked python - <<'PY'
+          import os, platform
+          from pathlib import Path
+          system = {'Darwin':'mac','Windows':'win','Linux':'linux'}[platform.system()]
+          arch = {'arm64':'arm64','aarch64':'arm64','x86_64':'x64','AMD64':'x64'}[platform.machine()]
+          assert (system, arch) == (os.environ['TARGET_PLATFORM'], os.environ['TARGET_ARCH']), 'Native Python architecture mismatch'
+          root = Path('.local/build')
+          root.mkdir(parents=True, exist_ok=True)
+          (root/'backend.py').write_text('import multiprocessing\nfrom harq_lab.cli import main\nif __name__ == "__main__":\n    multiprocessing.freeze_support()\n    main()\n')
+          PY
+      - name: Bundle Python and its dependencies
+        run: >-
+          uv run --locked --with pyinstaller==6.22.3 pyinstaller
+          --noconfirm --clean --onedir --name harq-backend --paths .
+          --distpath .local/build/runtime --workpath .local/build/work --specpath .local/build
+          --collect-submodules harq_lab --collect-submodules uvicorn .local/build/backend.py
+      - name: Verify frozen API and three-process I/Q mode
+        run: |
+          uv run --locked python - <<'PY'
+          import json, os, socket, subprocess, time, urllib.request
+          from pathlib import Path
+          exe = (Path('.local/build/runtime/harq-backend') / ('harq-backend.exe' if os.name == 'nt' else 'harq-backend')).resolve()
+          subprocess.run([str(exe), '--help'], check=True, timeout=30)
+          cfg = Path('.local/build/smoke.json')
+          cfg.write_text(json.dumps({'backend':'realtime_iq','packets':1,'processes':1,'snr_db':25,'propagation_ms':0,'ack_timeout_ms':3000,'duration_s':10}))
+          dest = Path('.local/build/smoke-result.json')
+          subprocess.run([str(exe),'hardware',str(cfg),'--output',str(dest)], check=True, timeout=40)
+          result = json.loads(dest.read_text())
+          assert result['metrics']['acknowledged'] == 1, 'Frozen modem did not receive ACK'
+          assert len({p['pid'] for p in result['runtime'].values()}) == 3, 'Missing independent DSP processes'
+          with socket.socket() as sock:
+              sock.bind(('127.0.0.1',0)); port = sock.getsockname()[1]
+          env = {**os.environ, 'HARQ_API_TOKEN':'release-smoke','HARQ_DB':str(Path('.local/build/smoke.sqlite3').resolve())}
+          with Path('.local/build/api.log').open('w') as log:
+              proc = subprocess.Popen([str(exe),'serve','--port',str(port)], env=env, stdout=log, stderr=log)
+              try:
+                  for _ in range(120):
+                      if proc.poll() is not None: raise RuntimeError('Frozen API exited')
+                      try:
+                          req = urllib.request.Request(f'http://127.0.0.1:{port}/api/health', headers={'X-HARQ-Token':'release-smoke'})
+                          with urllib.request.urlopen(req,timeout=1) as response:
+                              assert json.load(response)['status'] == 'ok'
+                          break
+                      except OSError: time.sleep(.25)
+                  else: raise RuntimeError('Frozen API health check timed out')
+              finally:
+                  proc.terminate()
+                  try: proc.wait(timeout=10)
+                  except subprocess.TimeoutExpired: proc.kill(); proc.wait()
+          PY
+      - name: Configure native installers and portable archives
+        run: |
+          uv run --locked python - <<'PY'
+          import json, os
+          from pathlib import Path
+          config = json.loads(Path('package.json').read_text())['build']
+          config['directories']['output'] = f'desktop/dist/{os.environ["TARGET_ID"]}'
+          config['extraResources'] = [{'from':str(Path('.local/build/runtime/harq-backend').resolve()),'to':'backend'}]
+          config['artifactName'] = 'HARQ-Lab-${version}-${os}-${arch}.${ext}'
+          for system, targets in [('mac',['dmg','zip']),('win',['nsis','zip']),('linux',['AppImage','tar.gz'])]:
+              config[system]['target'] = targets
+          Path('.local/build/builder.json').write_text(json.dumps(config))
+          PY
+      - name: Build distributions
+        run: npx --no-install electron-builder --config .local/build/builder.json --${{ matrix.platform }} --${{ matrix.arch }} --publish never
+      - name: Record source and artifact checksums
+        run: |
+          uv run --locked python - <<'PY'
+          import hashlib, json, os, subprocess
+          from pathlib import Path
+          output = Path('desktop/dist') / os.environ['TARGET_ID']
+          version = json.loads(Path('package.json').read_text())['version']
+          tree = subprocess.check_output(['git','ls-tree','-r','--full-tree',os.environ['SOURCE_COMMIT']])
+          endings = {'win':('.exe','.zip'),'mac':('.dmg','.zip'),'linux':('.AppImage','.tar.gz')}[os.environ['TARGET_PLATFORM']]
+          files = sorted(p for p in output.iterdir() if p.is_file() and p.name.endswith(endings))
+          assert all(any(p.name.endswith(ext) for p in files) for ext in endings), 'Missing installer or portable archive'
+          def digest(file):
+              with file.open('rb') as stream: return hashlib.file_digest(stream,'sha256').hexdigest()
+          manifest = {'version':version,'commit':os.environ['SOURCE_COMMIT'],'source_sha256':hashlib.sha256(tree).hexdigest(),
+                      'platform':os.environ['TARGET_PLATFORM'],'arch':os.environ['TARGET_ARCH'],
+                      'files':[{'name':p.name,'sha256':digest(p)} for p in files]}
+          (output/'manifest.json').write_text(json.dumps(manifest,indent=2)+'\n')
+          PY
+      - uses: actions/upload-artifact@v4
+        with:
+          name: harq-${{ matrix.id }}
+          path: |
+            desktop/dist/${{ matrix.id }}/*.exe
+            desktop/dist/${{ matrix.id }}/*.zip
+            desktop/dist/${{ matrix.id }}/*.dmg
+            desktop/dist/${{ matrix.id }}/*.AppImage
+            desktop/dist/${{ matrix.id }}/*.tar.gz
+            desktop/dist/${{ matrix.id }}/manifest.json
+          if-no-files-found: error
+          retention-days: 7
+      - name: Keep diagnostics on failure
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: diagnostics-${{ matrix.id }}
+          path: |
+            .local/build/api.log
+            .local/build/smoke-result.json
+            test-results/
+          if-no-files-found: ignore
+          retention-days: 7
+
+  publish:
+    needs: [verify, build]
+    if: ${{ !inputs.build_only }}
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    permissions:
+      contents: write
+    env:
+      GH_TOKEN: ${{ github.token }}
+      REPO: ${{ github.repository }}
+      PUBLISH: ${{ inputs.publish }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.source_commit }}
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: harq-*
+          path: release-artifacts
+      - name: Verify all four builds, upload draft assets, then publish
+        run: |
+          python - <<'PY'
+          import hashlib, json, os, subprocess
+          from pathlib import Path
+          output = Path('release-artifacts')
+          required = {('win','x64'),('linux','x64'),('mac','arm64'),('mac','x64')}
+          seen, names, files = set(), set(), []
+          sha, tag, repo = os.environ['SOURCE_COMMIT'], os.environ['RELEASE_TAG'], os.environ['REPO']
+          version = json.loads(Path('package.json').read_text())['version']
+          tree = subprocess.check_output(['git','ls-tree','-r','--full-tree',sha])
+          source_hash = hashlib.sha256(tree).hexdigest()
+          for path in sorted(output.glob('*/manifest.json')):
+              data = json.loads(path.read_text())
+              target = (data['platform'],data['arch'])
+              assert target in required and target not in seen, 'Unexpected/duplicate target'
+              assert (data['version'],data['commit'],data['source_sha256']) == (version,sha,source_hash), 'Stale source'
+              assert len(data['files']) >= 2, 'Incomplete target'
+              seen.add(target)
+              for item in data['files']:
+                  name = item['name']; file = path.parent/name
+                  assert Path(name).name == name and name not in names and not file.is_symlink(), 'Unsafe/duplicate filename'
+                  with file.open('rb') as stream: actual = hashlib.file_digest(stream,'sha256').hexdigest()
+                  assert actual == item['sha256'], 'Artifact checksum mismatch'
+                  names.add(name); files.append(file)
+          assert seen == required, 'All four target builds must succeed before a release can be published'
+          sums = output/'SHA256SUMS.txt'
+          sums.write_text(''.join(f'{hashlib.sha256(file.read_bytes()).hexdigest()}  {file.name}\n' for file in files))
+          notes = output/'notes.md'
+          notes.write_text(f'HARQ Lab {version}\n\nWindows x64: EXE/ZIP. Linux x64: AppImage/tar.gz. macOS ARM64 and Intel: DMG/ZIP.\n\nPython engine is bundled. RF drivers require separate installation.\n\nSource: {sha}\n')
+          existing = subprocess.run(['gh','api',f'repos/{repo}/releases/tags/{tag}'], capture_output=True,text=True)
+          if existing.returncode == 0:
+              release = json.loads(existing.stdout)
+              assert release['draft'] and release['target_commitish'] == sha, 'Refusing to replace an unrelated or published release'
+          elif '404' in existing.stderr:
+              subprocess.run(['gh','release','create',tag,'--repo',repo,'--target',sha,'--draft','--title',f'HARQ Lab {version}','--notes-file',str(notes),*(['--prerelease'] if '-' in version else [])],check=True)
+          else: raise RuntimeError(existing.stderr)
+          subprocess.run(['gh','release','upload',tag,*map(str,files),str(sums),'--repo',repo,'--clobber'],check=True)
+          if os.environ['PUBLISH'] == 'true':
+              subprocess.run(['gh','release','edit',tag,'--repo',repo,'--draft=false'],check=True)
+          url = f'https://github.com/{repo}/releases/tag/{tag}'
+          with Path(os.environ['GITHUB_STEP_SUMMARY']).open('a') as summary:
+              summary.write(f'Four targets verified: [HARQ Lab {version}]({url})\n')
+          print(url)
+          PY
